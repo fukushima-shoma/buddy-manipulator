@@ -1,0 +1,73 @@
+<mujoco model="buddy_manipulator">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <joint damping="1.5" armature="0.05"/>
+    <geom friction="0.8 0.1 0.1" density="650" rgba="0.24 0.48 0.78 1"/>
+    <position kp="80" kv="10" forcerange="-30 30"/>
+  </default>
+
+  <visual>
+    <headlight diffuse="0.7 0.7 0.7" ambient="0.35 0.35 0.35"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.12 0.18 0.25" rgb2="0.02 0.03 0.05" width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.18 0.19 0.20" rgb2="0.12 0.13 0.14" width="512" height="512"/>
+    <material name="floor" texture="grid" texrepeat="4 4" reflectance="0.1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 -0.5 1.3" dir="0 0.4 -1" directional="true"/>
+    <geom name="floor" type="plane" size="1 1 0.05" material="floor"/>
+    <camera name="overview" pos="0.75 -0.75 0.60" xyaxes="0.7 0.7 0 -0.35 0.35 0.87"/>
+
+    <body name="pedestal" pos="0 0 0.04">
+      <geom type="cylinder" size="0.09 0.04" rgba="0.12 0.15 0.18 1"/>
+      <body name="base" pos="0 0 0.08">
+        <joint name="base_yaw" type="hinge" axis="0 0 1" range="-3.14 3.14"/>
+        <geom type="cylinder" size="0.065 0.04"/>
+
+        <body name="upper_arm">
+          <joint name="shoulder_joint" type="hinge" axis="0 -1 0" range="-1.57 1.57"/>
+          <geom type="capsule" fromto="0 0 0 0.22 0 0" size="0.032"/>
+          <body name="forearm" pos="0.22 0 0">
+            <joint name="elbow_joint" type="hinge" axis="0 -1 0" range="-2.40 2.40"/>
+            <geom type="capsule" fromto="0 0 0 0.18 0 0" size="0.027" rgba="0.34 0.62 0.92 1"/>
+            <body name="wrist" pos="0.18 0 0">
+              <joint name="wrist_joint" type="hinge" axis="0 -1 0" range="-2.80 2.80"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.022" rgba="0.20 0.38 0.64 1"/>
+              <site name="tool_tip" pos="0.08 0 0" size="0.008" rgba="1 0.8 0.1 1"/>
+
+              <body name="left_finger" pos="0.08 0.015 0">
+                <joint name="left_finger_joint" type="slide" axis="0 1 0" range="0 0.03"/>
+                <geom type="box" pos="0.025 0 0" size="0.025 0.006 0.008" rgba="0.9 0.65 0.15 1"/>
+              </body>
+              <body name="right_finger" pos="0.08 -0.015 0">
+                <joint name="right_finger_joint" type="slide" axis="0 -1 0" range="0 0.03"/>
+                <geom type="box" pos="0.025 0 0" size="0.025 0.006 0.008" rgba="0.9 0.65 0.15 1"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <body name="red_block" pos="0.30 0.08 0.025">
+      <freejoint/>
+      <geom type="box" size="0.025 0.025 0.025" density="400" rgba="0.9 0.15 0.12 1"/>
+    </body>
+    <geom name="goal_zone" type="cylinder" pos="0.25 -0.22 0.003" size="0.08 0.003" contype="0" conaffinity="0" rgba="0.1 0.8 0.35 0.45"/>
+  </worldbody>
+
+  <actuator>
+    <position name="base" joint="base_yaw" ctrlrange="-3.14 3.14"/>
+    <position name="shoulder" joint="shoulder_joint" ctrlrange="-1.57 1.57"/>
+    <position name="elbow" joint="elbow_joint" ctrlrange="-2.40 2.40"/>
+    <position name="wrist" joint="wrist_joint" ctrlrange="-2.80 2.80"/>
+    <position name="left_finger" joint="left_finger_joint" ctrlrange="0 0.03" kp="120" kv="8"/>
+    <position name="right_finger" joint="right_finger_joint" ctrlrange="0 0.03" kp="120" kv="8"/>
+  </actuator>
+</mujoco>

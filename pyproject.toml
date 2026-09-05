@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "buddy-manipulator"
+version = "0.1.0"
+description = "A simulation-first robot manipulation learning project."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  # MuJoCo 3.4+ does not publish a macOS Python 3.9 wheel.
+  "mujoco>=3.2,<3.4; python_version < '3.10' and sys_platform == 'darwin'",
+  "mujoco>=3.2,<4; python_version >= '3.10' or sys_platform != 'darwin'",
+  "numpy>=1.26,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+]
+
+[project.scripts]
+buddy-arm-demo = "buddy_manipulator.demo:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+buddy_manipulator = ["models/*.xml"]
