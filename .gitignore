@@ -7,3 +7,4 @@ data/
 outputs/
 checkpoints/
 .DS_Store
+MUJOCO_LOG.TXT

@@ -13,6 +13,7 @@ dependencies = [
   "mujoco>=3.2,<3.4; python_version < '3.10' and sys_platform == 'darwin'",
   "mujoco>=3.2,<4; python_version >= '3.10' or sys_platform != 'darwin'",
   "numpy>=1.26,<3",
+  "pillow>=10,<12",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,7 @@ dev = [
 
 [project.scripts]
 buddy-arm-demo = "buddy_manipulator.demo:main"
+buddy-vision-demo = "buddy_manipulator.vision_demo:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

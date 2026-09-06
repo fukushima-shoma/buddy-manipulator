@@ -44,8 +44,8 @@ Buddyで培ったROS 2・カメラ認識・会話・安全停止の知識を、�
 4. テレオペ操作を記録する
 5. 記録データから行動を予測するモデルを学習する
 
-全体計画は [docs/roadmap.md](docs/roadmap.md)、現在の演習は
-[docs/phase1.md](docs/phase1.md) を参照。
+全体計画は [docs/roadmap.md](docs/roadmap.md)、各フェーズの演習は
+[docs/phase1.md](docs/phase1.md) と [docs/phase2.md](docs/phase2.md) を参照。
 
 ## Phase 1 クイックスタート
 
@@ -87,3 +87,13 @@ Phase 1では以下を実装済み。
 - 順運動学・解析的逆運動学
 - 赤いブロックと緑の目標領域を含む卓上シーン
 - GUIなしで実行できるシミュレーションテスト
+
+## Phase 2 クイックスタート
+
+RGB-Dカメラで赤いブロックを検出し、3D位置とアプローチ姿勢を計算する。
+
+```bash
+./scripts/run_vision_demo.sh
+```
+
+検出画像とJSON結果は`outputs/phase2/`へ保存される。
