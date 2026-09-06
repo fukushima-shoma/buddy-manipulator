@@ -39,11 +39,14 @@ JSONにはschema version、成功ラベル、sample数、各shape、開始位置
 ## 検証
 
 ```bash
-source .venv/bin/activate
-buddy-validate-dataset data/demonstrations
+./scripts/validate_dataset.sh data/demonstrations
 ```
 
 validatorは必須配列、sample数、dtype、関節・行動次元、NaN/Inf、metadata整合性を検査する。
+
+Apple Siliconではlauncherがnative `arm64` Pythonを強制する。Rosetta Terminalで
+`.venv`をactivateして直接`buddy-validate-dataset`を実行すると、arm64版NumPyを
+`x86_64` Pythonから読み込むため失敗する。
 
 ## 設計上の意図
 

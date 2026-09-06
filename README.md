@@ -69,8 +69,7 @@ GUIモードでは、ターミナルに`MuJoCo viewer started`と表示され、
 
 ```bash
 ./scripts/run_demo.sh --headless
-source .venv/bin/activate
-pytest
+./scripts/run_tests.sh
 ```
 
 ### Apple SiliconとRosetta
@@ -117,8 +116,11 @@ GUIなしで成功判定まで確認する場合:
 
 ```bash
 ./scripts/collect_demos.sh --episodes 3
-source .venv/bin/activate
-buddy-validate-dataset data/demonstrations
+./scripts/validate_dataset.sh data/demonstrations
 ```
 
 各episodeにはRGB、深度、6関節の状態、6次元action、物体位置、成功ラベルが含まれる。
+
+Apple Silicon上でRosetta Terminalを使っている場合、`.venv`をactivateしただけでは
+Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来のPyTorchを使う
+コマンドは`./scripts/run_python.sh`または各専用launcherから実行する。
