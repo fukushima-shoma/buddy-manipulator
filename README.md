@@ -46,7 +46,7 @@ Buddyで培ったROS 2・カメラ認識・会話・安全停止の知識を、�
 
 全体計画は [docs/roadmap.md](docs/roadmap.md)、各フェーズの演習は
 [docs/phase1.md](docs/phase1.md)、[docs/phase2.md](docs/phase2.md)、
-[docs/phase3.md](docs/phase3.md) を参照。
+[docs/phase3.md](docs/phase3.md)、[docs/phase4.md](docs/phase4.md) を参照。
 
 ## Phase 1 クイックスタート
 
@@ -134,3 +134,17 @@ Controls: `W/S` = X、`A/D` = Y、`R/F` = Z、`O/C` = gripper、
 Apple Silicon上でRosetta Terminalを使っている場合、`.venv`をactivateしただけでは
 Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来のPyTorchを使う
 コマンドは`./scripts/run_python.sh`または各専用launcherから実行する。
+
+## Phase 4 クイックスタート
+
+成功episodeをtrain/validationへepisode単位で分割し、RGB-D画像と関節状態から
+6次元actionを予測するbehavior-cloning policyを学習する。
+
+```bash
+./scripts/run_training.sh data/demonstrations --epochs 30
+./scripts/evaluate_policy.sh outputs/phase4/bc_policy.pt data/demonstrations
+```
+
+checkpointとtraining metricsは`outputs/phase4/`へ保存される。失敗episodeはdefaultでは
+学習から除外する。モデル構造、正規化、評価指標の詳細は
+[docs/phase4.md](docs/phase4.md)を参照。

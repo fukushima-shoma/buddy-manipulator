@@ -20,12 +20,17 @@ dependencies = [
 dev = [
   "pytest>=8,<9",
 ]
+ml = [
+  "torch>=2.2,<3",
+]
 
 [project.scripts]
 buddy-arm-demo = "buddy_manipulator.demo:main"
 buddy-collect-demos = "buddy_manipulator.collect_demos:main"
 buddy-grasp-demo = "buddy_manipulator.grasp_demo:main"
+buddy-evaluate-bc = "buddy_manipulator.evaluate_bc:main"
 buddy-teleop = "buddy_manipulator.teleop_demo:main"
+buddy-train-bc = "buddy_manipulator.train_bc:main"
 buddy-validate-dataset = "buddy_manipulator.validate_dataset:main"
 buddy-vision-demo = "buddy_manipulator.vision_demo:main"
 
