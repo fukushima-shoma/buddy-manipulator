@@ -205,6 +205,39 @@ class BehaviorCloningDataset(Dataset):
         }
 
 
+class MpsSafeAdaptiveAvgPool2d(nn.Module):
+    """Adaptive 2D average pooling using MPS-supported tensor reductions."""
+
+    def __init__(self, output_size: tuple[int, int]) -> None:
+        super().__init__()
+        if output_size[0] <= 0 or output_size[1] <= 0:
+            raise ValueError("output dimensions must be positive")
+        self.output_size = output_size
+
+    def forward(self, values: torch.Tensor) -> torch.Tensor:
+        height, width = values.shape[-2:]
+        output_height, output_width = self.output_size
+        rows = []
+        for row in range(output_height):
+            row_start = row * height // output_height
+            row_end = ((row + 1) * height + output_height - 1) // output_height
+            columns = []
+            for column in range(output_width):
+                column_start = column * width // output_width
+                column_end = (
+                    (column + 1) * width + output_width - 1
+                ) // output_width
+                columns.append(
+                    values[
+                        ...,
+                        row_start:row_end,
+                        column_start:column_end,
+                    ].mean(dim=(-2, -1))
+                )
+            rows.append(torch.stack(columns, dim=-1))
+        return torch.stack(rows, dim=-2)
+
+
 class BehaviorCloningPolicy(nn.Module):
     """Small CNN policy for RGB-D and proprioceptive observations."""
 
@@ -217,7 +250,7 @@ class BehaviorCloningPolicy(nn.Module):
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.AdaptiveAvgPool2d((2, 2)),
+            MpsSafeAdaptiveAvgPool2d((2, 2)),
             nn.Flatten(),
         )
         self.action_head = nn.Sequential(

@@ -6,6 +6,7 @@ import torch
 from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
     BehaviorCloningPolicy,
+    MpsSafeAdaptiveAvgPool2d,
     compute_normalization,
     discover_episodes,
     load_episodes,
@@ -78,6 +79,16 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
         sample["joint_position"].unsqueeze(0),
     )
     assert prediction.shape == (1, 6)
+
+
+def test_mps_safe_pool_matches_native_adaptive_pool() -> None:
+    feature_map = torch.arange(2 * 3 * 15 * 20, dtype=torch.float32).reshape(
+        2, 3, 15, 20
+    )
+    expected = torch.nn.functional.adaptive_avg_pool2d(feature_map, (2, 2))
+    actual = MpsSafeAdaptiveAvgPool2d((2, 2))(feature_map)
+
+    torch.testing.assert_close(actual, expected)
 
 
 def test_training_writes_reusable_checkpoint(tmp_path) -> None:

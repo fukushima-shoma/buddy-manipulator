@@ -21,6 +21,11 @@ RGB-Dは3層CNNでencodeし、正規化したjoint positionと結合する。MLP
 jointsと2 finger jointsのabsolute position targetである。`object_position`は教師入力に
 使わず、シミュレーション評価専用に残す。
 
+CNN feature mapには、PyTorch標準と同じwindowを明示的に平均するadaptive poolingを使う。
+これはApple SiliconのMPS backendが、割り切れないinput/output sizeの標準adaptive poolingを
+未実装としているためである。追加の学習parameterはなく、CPUで学習した既存checkpointと
+同じ計算をMPS上でも再現できる。
+
 ## Training
 
 PyTorchを含む環境を初回だけ更新する。
