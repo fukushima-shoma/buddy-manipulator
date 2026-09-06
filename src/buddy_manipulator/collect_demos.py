@@ -63,6 +63,7 @@ def collect_episode(
     sample_hz: float,
     width: int,
     height: int,
+    source: str = "scripted",
 ) -> bool:
     model, data = load_model()
     set_block_position(model, data, block_position)
@@ -84,7 +85,7 @@ def collect_episode(
         recorder.arrays(),
         success=result.success,
         block_start_position=block_position,
-        source="scripted",
+        source=source,
         termination="completed",
     )
     print(

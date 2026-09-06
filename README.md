@@ -156,5 +156,6 @@ Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来の
 
 checkpointとtraining metricsは`outputs/phase4/`へ保存される。失敗episodeはdefaultでは
 学習から除外する。closed-loop rolloutの結果も同じdirectoryへ保存される。
+失敗配置からexpert dataを再収集し、paired rolloutを比較するfailure-driven loopも利用できる。
 モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。

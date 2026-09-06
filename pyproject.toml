@@ -26,7 +26,9 @@ ml = [
 
 [project.scripts]
 buddy-arm-demo = "buddy_manipulator.demo:main"
+buddy-compare-rollouts = "buddy_manipulator.compare_rollouts:main"
 buddy-collect-demos = "buddy_manipulator.collect_demos:main"
+buddy-collect-failure-demos = "buddy_manipulator.collect_failure_demos:main"
 buddy-grasp-demo = "buddy_manipulator.grasp_demo:main"
 buddy-evaluate-bc = "buddy_manipulator.evaluate_bc:main"
 buddy-rollout-bc = "buddy_manipulator.rollout_bc:main"
