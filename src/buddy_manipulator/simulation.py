@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib.resources import files
 import time
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from buddy_manipulator.kinematics import JointAngles
 
@@ -84,6 +84,7 @@ def run_keyframes(
     *,
     viewer: Any | None = None,
     realtime: bool = False,
+    step_callback: Callable[[Any, Any], None] | None = None,
 ) -> None:
     mujoco = _mujoco()
     for keyframe in keyframes:
@@ -92,6 +93,8 @@ def run_keyframes(
         end_time = data.time + keyframe.duration
         while data.time < end_time:
             mujoco.mj_step(model, data)
+            if step_callback is not None:
+                step_callback(model, data)
             if viewer is not None:
                 if not viewer.is_running():
                     return

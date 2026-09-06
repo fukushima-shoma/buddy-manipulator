@@ -45,7 +45,8 @@ Buddyで培ったROS 2・カメラ認識・会話・安全停止の知識を、�
 5. 記録データから行動を予測するモデルを学習する
 
 全体計画は [docs/roadmap.md](docs/roadmap.md)、各フェーズの演習は
-[docs/phase1.md](docs/phase1.md) と [docs/phase2.md](docs/phase2.md) を参照。
+[docs/phase1.md](docs/phase1.md)、[docs/phase2.md](docs/phase2.md)、
+[docs/phase3.md](docs/phase3.md) を参照。
 
 ## Phase 1 クイックスタート
 
@@ -109,3 +110,15 @@ GUIなしで成功判定まで確認する場合:
 ```bash
 ./scripts/run_grasp_demo.sh --headless
 ```
+
+## Phase 3 クイックスタート
+
+ランダムなブロック配置でexpert graspを実行し、模倣学習用データを収集する。
+
+```bash
+./scripts/collect_demos.sh --episodes 3
+source .venv/bin/activate
+buddy-validate-dataset data/demonstrations
+```
+
+各episodeにはRGB、深度、6関節の状態、6次元action、物体位置、成功ラベルが含まれる。

@@ -23,7 +23,9 @@ dev = [
 
 [project.scripts]
 buddy-arm-demo = "buddy_manipulator.demo:main"
+buddy-collect-demos = "buddy_manipulator.collect_demos:main"
 buddy-grasp-demo = "buddy_manipulator.grasp_demo:main"
+buddy-validate-dataset = "buddy_manipulator.validate_dataset:main"
 buddy-vision-demo = "buddy_manipulator.vision_demo:main"
 
 [tool.pytest.ini_options]

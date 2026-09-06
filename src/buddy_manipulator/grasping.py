@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Any
+from typing import Any, Callable
 
 from buddy_manipulator.kinematics import Pose, inverse_kinematics
 from buddy_manipulator.simulation import Keyframe, _mujoco, run_keyframes
@@ -67,6 +67,7 @@ def execute_grasp(
     *,
     object_body_name: str = "red_block",
     viewer: Any | None = None,
+    step_callback: Callable[[Any, Any], None] | None = None,
 ) -> GraspResult:
     """Approach, descend, close, and lift using the perceived block position."""
     initial_height = _object_height(model, data, object_body_name)
@@ -93,6 +94,7 @@ def execute_grasp(
         ],
         viewer=viewer,
         realtime=realtime,
+        step_callback=step_callback,
     )
 
     final_height = _object_height(model, data, object_body_name)
