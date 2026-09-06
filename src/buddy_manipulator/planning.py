@@ -28,4 +28,7 @@ def plan_approach_joints(
     *,
     clearance: float = 0.10,
 ) -> JointAngles:
-    return inverse_kinematics(make_approach_pose(detection, clearance=clearance))
+    return inverse_kinematics(
+        make_approach_pose(detection, clearance=clearance),
+        elbow_up=True,
+    )

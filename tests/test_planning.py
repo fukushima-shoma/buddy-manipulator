@@ -19,10 +19,12 @@ def test_make_approach_pose_adds_vertical_clearance() -> None:
 def test_planned_joints_reach_approach_pose() -> None:
     detection = make_detection()
     expected = make_approach_pose(detection)
-    actual = forward_kinematics(plan_approach_joints(detection))
+    joints = plan_approach_joints(detection)
+    actual = forward_kinematics(joints)
     assert (actual.x, actual.y, actual.z, actual.pitch) == pytest.approx(
         (expected.x, expected.y, expected.z, expected.pitch)
     )
+    assert joints.elbow < 0
 
 
 def test_clearance_must_be_positive() -> None:

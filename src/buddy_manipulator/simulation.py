@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.resources import files
+import time
 from typing import Any, Iterable
 
 from buddy_manipulator.kinematics import JointAngles
@@ -82,6 +83,7 @@ def run_keyframes(
     keyframes: Iterable[Keyframe],
     *,
     viewer: Any | None = None,
+    realtime: bool = False,
 ) -> None:
     mujoco = _mujoco()
     for keyframe in keyframes:
@@ -94,3 +96,5 @@ def run_keyframes(
                 if not viewer.is_running():
                     return
                 viewer.sync()
+                if realtime:
+                    time.sleep(float(model.opt.timestep))

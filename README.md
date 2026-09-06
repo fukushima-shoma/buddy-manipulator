@@ -97,3 +97,15 @@ RGB-Dカメラで赤いブロックを検出し、3D位置とアプローチ姿�
 ```
 
 検出画像とJSON結果は`outputs/phase2/`へ保存される。
+
+認識した座標へアームを動かし、ブロックを把持して持ち上げる。
+
+```bash
+./scripts/run_grasp_demo.sh
+```
+
+GUIなしで成功判定まで確認する場合:
+
+```bash
+./scripts/run_grasp_demo.sh --headless
+```

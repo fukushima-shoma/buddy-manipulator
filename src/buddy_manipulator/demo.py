@@ -48,7 +48,7 @@ def main() -> None:
             viewer.cam.azimuth = 135
             viewer.cam.elevation = -25
             print("MuJoCo viewer started. Running arm demo...", flush=True)
-            run_keyframes(model, data, demo_motion(), viewer=viewer)
+            run_keyframes(model, data, demo_motion(), viewer=viewer, realtime=True)
             print("Demo complete. Close the MuJoCo window to exit.", flush=True)
             while viewer.is_running():
                 viewer.sync()
