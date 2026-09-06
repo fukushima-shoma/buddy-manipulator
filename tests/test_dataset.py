@@ -31,6 +31,8 @@ def test_saved_episode_passes_validation(tmp_path) -> None:
     assert metadata["schema_version"] == 1
     assert metadata["sample_count"] == 3
     assert metadata["success"] is True
+    assert metadata["source"] == "scripted"
+    assert metadata["termination"] == "completed"
 
 
 def test_validator_detects_sample_count_mismatch(tmp_path) -> None:

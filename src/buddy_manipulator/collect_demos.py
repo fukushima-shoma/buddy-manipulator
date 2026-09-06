@@ -84,6 +84,8 @@ def collect_episode(
         recorder.arrays(),
         success=result.success,
         block_start_position=block_position,
+        source="scripted",
+        termination="completed",
     )
     print(
         f"episode {episode_index:05d}: success={str(result.success).lower()} "

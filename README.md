@@ -121,6 +121,16 @@ GUIなしで成功判定まで確認する場合:
 
 各episodeにはRGB、深度、6関節の状態、6次元action、物体位置、成功ラベルが含まれる。
 
+Keyboard teleoperationで人間操作の成功・失敗episodeを記録する。
+
+```bash
+./scripts/run_teleop.sh
+```
+
+Controls: `W/S` = X、`A/D` = Y、`R/F` = Z、`O/C` = gripper、
+`Enter` = 保存、`Esc` = 中断して失敗例として保存。詳細は
+[docs/phase3.md](docs/phase3.md)を参照。
+
 Apple Silicon上でRosetta Terminalを使っている場合、`.venv`をactivateしただけでは
 Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来のPyTorchを使う
 コマンドは`./scripts/run_python.sh`または各専用launcherから実行する。

@@ -96,6 +96,8 @@ def save_episode(
     *,
     success: bool,
     block_start_position: tuple[float, float, float],
+    source: str = "scripted",
+    termination: str = "completed",
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = f"episode_{episode_index:05d}"
@@ -106,6 +108,8 @@ def save_episode(
         "schema_version": SCHEMA_VERSION,
         "episode_index": episode_index,
         "success": success,
+        "source": source,
+        "termination": termination,
         "sample_count": int(arrays["timestamp"].shape[0]),
         "sample_shapes": {key: list(value.shape) for key, value in arrays.items()},
         "controlled_joints": list(CONTROLLED_JOINTS),

@@ -48,6 +48,32 @@ Apple Siliconではlauncherがnative `arm64` Pythonを強制する。Rosetta Ter
 `.venv`をactivateして直接`buddy-validate-dataset`を実行すると、arm64版NumPyを
 `x86_64` Pythonから読み込むため失敗する。
 
+## Keyboard teleoperation
+
+人間が操作した成功・失敗episodeを記録する。
+
+```bash
+./scripts/run_teleop.sh
+```
+
+MuJoCoウィンドウをクリックしてfocusし、次のキーを使う。1回の移動量は1 cm。
+
+| Key | Action |
+|---|---|
+| `W` / `S` | X方向へ前進 / 後退 |
+| `A` / `D` | Y方向へ左 / 右 |
+| `R` / `F` | 上昇 / 下降 |
+| `O` / `C` | gripperを開く / 閉じる |
+| `Enter` | episodeを完了して保存 |
+| `Esc` | 中断し、失敗episodeとして保存 |
+
+開始時は認識したブロックの10 cm上に手先がある。基本操作は`F`を約10回、`C`、
+`R`を8〜10回、`Enter`。位置がずれた場合は`W/S/A/D`で補正する。
+
+成功条件はscripted expertと同じく、5 cm以上持ち上げ、かつ最終状態でfinger contactが
+あること。`source=teleop`と`termination=completed|aborted|window_closed|timeout`が
+JSON metadataへ記録されるため、失敗理由を後から分類できる。
+
 ## 設計上の意図
 
-最初はscripted expertを使い、成功軌道を安定して集める。これによりPhase 4の行動クローニングが失敗したとき、原因を「データ収集」と「学習」に分離できる。今後、同じ`EpisodeRecorder`へkeyboard/gamepad teleoperationを接続し、人間由来の多様な軌道と失敗例を追加する。
+最初はscripted expertを使い、成功軌道を安定して集める。これによりPhase 4の行動クローニングが失敗したとき、原因を「データ収集」と「学習」に分離できる。同じ`EpisodeRecorder`をkeyboard teleoperationでも利用し、人間由来の多様な軌道と失敗例を追加する。

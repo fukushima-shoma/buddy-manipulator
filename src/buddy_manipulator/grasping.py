@@ -20,7 +20,7 @@ class GraspResult:
     finger_contact_count: int
 
 
-def _object_height(model: Any, data: Any, body_name: str) -> float:
+def object_height(model: Any, data: Any, body_name: str = "red_block") -> float:
     mujoco = _mujoco()
     body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
     if body_id < 0:
@@ -60,6 +60,25 @@ def _top_down_joints(x: float, y: float, z: float):
     )
 
 
+def evaluate_grasp(
+    model: Any,
+    data: Any,
+    initial_height: float,
+    *,
+    object_body_name: str = "red_block",
+) -> GraspResult:
+    final_height = object_height(model, data, object_body_name)
+    contacts = _finger_contact_count(model, data, object_body_name)
+    lift_delta = final_height - initial_height
+    return GraspResult(
+        success=lift_delta >= 0.05 and contacts > 0,
+        initial_height=initial_height,
+        final_height=final_height,
+        lift_delta=lift_delta,
+        finger_contact_count=contacts,
+    )
+
+
 def execute_grasp(
     model: Any,
     data: Any,
@@ -70,7 +89,7 @@ def execute_grasp(
     step_callback: Callable[[Any, Any], None] | None = None,
 ) -> GraspResult:
     """Approach, descend, close, and lift using the perceived block position."""
-    initial_height = _object_height(model, data, object_body_name)
+    initial_height = object_height(model, data, object_body_name)
     pregrasp = _top_down_joints(
         detection.x,
         detection.y,
@@ -97,13 +116,9 @@ def execute_grasp(
         step_callback=step_callback,
     )
 
-    final_height = _object_height(model, data, object_body_name)
-    contacts = _finger_contact_count(model, data, object_body_name)
-    lift_delta = final_height - initial_height
-    return GraspResult(
-        success=lift_delta >= 0.05 and contacts > 0,
-        initial_height=initial_height,
-        final_height=final_height,
-        lift_delta=lift_delta,
-        finger_contact_count=contacts,
+    return evaluate_grasp(
+        model,
+        data,
+        initial_height,
+        object_body_name=object_body_name,
     )
