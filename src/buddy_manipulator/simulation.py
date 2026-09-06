@@ -16,8 +16,24 @@ def _mujoco() -> Any:
     try:
         import mujoco
     except ImportError as exc:
+        import_error = str(exc)
+        architecture_mismatch = (
+            "x86_64 build of Python on an Apple Silicon" in import_error
+            or (
+                "incompatible architecture" in import_error
+                and "have 'arm64', need 'x86_64'" in import_error
+            )
+        )
+        if architecture_mismatch:
+            raise RuntimeError(
+                "MuJoCo requires native arm64 Python on Apple Silicon, but "
+                "this process is running as x86_64 under Rosetta. Run the "
+                "demo with: ./scripts/run_demo.sh"
+            ) from exc
         raise RuntimeError(
-            "MuJoCo is not installed. Run: python -m pip install -e '.[dev]'"
+            "MuJoCo could not be imported. Install the project with: "
+            "python -m pip install -e '.[dev]'. Original error: "
+            f"{exc}"
         ) from exc
     return mujoco
 

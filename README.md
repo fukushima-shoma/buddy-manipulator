@@ -52,23 +52,33 @@ Buddyで培ったROS 2・カメラ認識・会話・安全停止の知識を、�
 Python 3.9以上が必要。
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
+./scripts/setup.sh
 ```
 
 GUIで4自由度アームのデモを実行する。
 
 ```bash
-buddy-arm-demo
+./scripts/run_demo.sh
 ```
+
+GUIモードでは、ターミナルに`MuJoCo viewer started`と表示され、デモ終了後も
+ウィンドウが開いたままになる。MuJoCoウィンドウを閉じるとコマンドが終了する。
 
 画面を開かずに動作確認する場合:
 
 ```bash
-buddy-arm-demo --headless
+./scripts/run_demo.sh --headless
+source .venv/bin/activate
 pytest
 ```
+
+### Apple SiliconとRosetta
+
+Apple Silicon MacではMuJoCoをnative `arm64` Pythonで実行する必要がある。
+TerminalやIDEがRosetta (`x86_64`) で動いていても、`setup.sh`と`run_demo.sh`は
+Pythonプロセスを`arm64`で起動する。GUI実行時はmacOSで必要な`mjpython`へ自動的に
+切り替え、`--headless`では通常のPythonを使う。直接`buddy-arm-demo`を実行すると、
+親シェルによっては`x86_64`で起動されるか、GUI初期化に失敗するため、上記スクリプトを使う。
 
 Phase 1では以下を実装済み。
 

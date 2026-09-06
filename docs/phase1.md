@@ -4,6 +4,11 @@
 
 Phase 1の実装では、赤いブロックへ手先を近づけ、グリッパーを閉じてホーム姿勢へ戻す一連の関節位置制御を実行する。把持の成功はまだ保証せず、Phase 2以降で視覚と把持計画を追加する。
 
+実行はリポジトリ直下から`./scripts/run_demo.sh`を使う。Apple Silicon Macでは、
+このスクリプトがRosettaの影響を避けてMuJoCoをnative `arm64`で起動する。
+GUIモードはデモ終了後もウィンドウを保持するため、画面を確認したらMuJoCoの
+ウィンドウを閉じて終了する。`--headless`は画面を開かずに即時終了する。
+
 ## モデル
 
 `src/buddy_manipulator/models/arm.xml`は、次の関節を持つ。
