@@ -143,8 +143,18 @@ Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来の
 ```bash
 ./scripts/run_training.sh data/demonstrations --epochs 30
 ./scripts/evaluate_policy.sh outputs/phase4/bc_policy.pt data/demonstrations
+
+./scripts/run_training.sh data/demonstrations \
+  --epochs 30 \
+  --action-horizon 8 \
+  --output-dir outputs/phase4/chunked
+./scripts/run_policy_rollout.sh \
+  outputs/phase4/chunked/bc_policy.pt \
+  --episodes 20 \
+  --headless
 ```
 
 checkpointとtraining metricsは`outputs/phase4/`へ保存される。失敗episodeはdefaultでは
-学習から除外する。モデル構造、正規化、評価指標の詳細は
+学習から除外する。closed-loop rolloutの結果も同じdirectoryへ保存される。
+モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。

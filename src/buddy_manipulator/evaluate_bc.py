@@ -53,12 +53,17 @@ def evaluate_checkpoint(
         paths = all_paths
     else:
         paths = select_named_episodes(all_paths, checkpoint[f"{split}_episodes"])
-    dataset = BehaviorCloningDataset(load_episodes(paths), normalization)
-    loader = DataLoader(dataset, batch_size=batch_size)
     config = checkpoint["model_config"]
+    dataset = BehaviorCloningDataset(
+        load_episodes(paths),
+        normalization,
+        action_horizon=int(config.get("action_horizon", 1)),
+    )
+    loader = DataLoader(dataset, batch_size=batch_size)
     model = BehaviorCloningPolicy(
         image_channels=int(config["image_channels"]),
         state_dim=int(config["state_dim"]),
+        action_horizon=int(config.get("action_horizon", 1)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     metrics = evaluate_policy(model, loader, normalization, device)
@@ -78,6 +83,7 @@ def main() -> None:
     )
     print(f"split: {metrics['split']} ({len(metrics['episodes'])} episodes)")
     print(f"samples: {metrics['samples']}")
+    print(f"predicted action vectors: {metrics['action_vectors']}")
     print(f"normalized MSE: {metrics['normalized_mse']:.6f}")
     print(f"mean action MAE: {metrics['mean_action_mae']:.6f}")
     print("per-actuator MAE: " + ", ".join(f"{value:.6f}" for value in metrics["action_mae"]))

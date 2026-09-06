@@ -36,6 +36,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--action-horizon",
+        type=int,
+        default=1,
+        help="Number of future actions predicted from each observation.",
+    )
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "mps", "cuda"))
     parser.add_argument(
         "--include-failures",
@@ -56,6 +62,7 @@ def evaluate_policy(
     absolute_error_sum = np.zeros(6, dtype=np.float64)
     element_count = 0
     sample_count = 0
+    action_vector_count = 0
     with torch.no_grad():
         for batch in loader:
             observation = batch["observation"].to(device)
@@ -65,19 +72,20 @@ def evaluate_policy(
             squared_error_sum += float(torch.square(prediction - target).sum().cpu())
             predicted_action = denormalize_action(prediction, normalization)
             target_action = denormalize_action(target, normalization)
+            absolute_error = torch.abs(predicted_action - target_action)
+            reduction_dimensions = tuple(range(absolute_error.ndim - 1))
             absolute_error_sum += (
-                torch.abs(predicted_action - target_action)
-                .sum(dim=0)
-                .cpu()
-                .numpy()
+                absolute_error.sum(dim=reduction_dimensions).cpu().numpy()
             )
             element_count += target.numel()
             sample_count += target.shape[0]
+            action_vector_count += target.numel() // 6
     return {
         "normalized_mse": squared_error_sum / element_count,
-        "action_mae": (absolute_error_sum / sample_count).tolist(),
+        "action_mae": (absolute_error_sum / action_vector_count).tolist(),
         "mean_action_mae": float(absolute_error_sum.sum() / element_count),
         "samples": sample_count,
+        "action_vectors": action_vector_count,
     }
 
 
@@ -92,8 +100,14 @@ def train(
     seed: int = 7,
     device_name: str = "auto",
     successful_only: bool = True,
+    action_horizon: int = 1,
 ) -> tuple[Path, dict[str, Any]]:
-    if epochs <= 0 or batch_size <= 0 or learning_rate <= 0:
+    if (
+        epochs <= 0
+        or batch_size <= 0
+        or learning_rate <= 0
+        or action_horizon <= 0
+    ):
         raise ValueError("epochs, batch_size, and learning_rate must be positive")
     random.seed(seed)
     np.random.seed(seed)
@@ -106,8 +120,16 @@ def train(
     train_episodes = load_episodes(train_paths)
     validation_episodes = load_episodes(validation_paths)
     normalization = compute_normalization(train_episodes)
-    train_dataset = BehaviorCloningDataset(train_episodes, normalization)
-    validation_dataset = BehaviorCloningDataset(validation_episodes, normalization)
+    train_dataset = BehaviorCloningDataset(
+        train_episodes,
+        normalization,
+        action_horizon=action_horizon,
+    )
+    validation_dataset = BehaviorCloningDataset(
+        validation_episodes,
+        normalization,
+        action_horizon=action_horizon,
+    )
     generator = torch.Generator().manual_seed(seed)
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, generator=generator
@@ -115,7 +137,7 @@ def train(
     validation_loader = DataLoader(validation_dataset, batch_size=batch_size)
 
     device = choose_device(device_name)
-    model = BehaviorCloningPolicy().to(device)
+    model = BehaviorCloningPolicy(action_horizon=action_horizon).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_function = nn.SmoothL1Loss()
     history = []
@@ -170,7 +192,12 @@ def train(
     checkpoint = {
         "format_version": 1,
         "model_state_dict": best_state,
-        "model_config": {"image_channels": 4, "state_dim": 6, "action_dim": 6},
+        "model_config": {
+            "image_channels": 4,
+            "state_dim": 6,
+            "action_dim": 6,
+            "action_horizon": action_horizon,
+        },
         "normalization": normalization.to_dict(),
         "train_episodes": [path.name for path in train_paths],
         "validation_episodes": [path.name for path in validation_paths],
@@ -184,6 +211,7 @@ def train(
         "checkpoint": str(checkpoint_path),
         "device": str(device),
         "epochs": epochs,
+        "action_horizon": action_horizon,
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],
@@ -208,6 +236,7 @@ def main() -> None:
         seed=args.seed,
         device_name=args.device,
         successful_only=not args.include_failures,
+        action_horizon=args.action_horizon,
     )
 
 

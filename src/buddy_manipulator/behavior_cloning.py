@@ -170,9 +170,14 @@ class BehaviorCloningDataset(Dataset):
         self,
         episodes: Sequence[EpisodeData],
         normalization: NormalizationStats,
+        *,
+        action_horizon: int = 1,
     ) -> None:
+        if action_horizon <= 0:
+            raise ValueError("action_horizon must be positive")
         self.episodes = list(episodes)
         self.normalization = normalization
+        self.action_horizon = action_horizon
         self._sample_index = [
             (episode_index, frame_index)
             for episode_index, episode in enumerate(self.episodes)
@@ -185,24 +190,61 @@ class BehaviorCloningDataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         episode_index, frame_index = self._sample_index[index]
         episode = self.episodes[episode_index]
-        rgb = episode.rgb[frame_index].astype(np.float32) / 255.0
-        depth = (
-            episode.depth[frame_index] - self.normalization.depth_mean
-        ) / self.normalization.depth_std
-        depth = np.clip(depth, -5.0, 5.0)
-        observation = np.concatenate([rgb, depth[..., None]], axis=-1)
-        observation = np.ascontiguousarray(observation.transpose(2, 0, 1))
-        joint = (
-            episode.joint_position[frame_index] - self.normalization.joint_mean
-        ) / self.normalization.joint_std
+        observation, joint = normalize_observation(
+            episode.rgb[frame_index],
+            episode.depth[frame_index],
+            episode.joint_position[frame_index],
+            self.normalization,
+        )
+        action_end = min(
+            episode.sample_count,
+            frame_index + self.action_horizon,
+        )
+        actions = episode.action[frame_index:action_end]
+        if actions.shape[0] < self.action_horizon:
+            padding = np.repeat(
+                actions[-1:],
+                self.action_horizon - actions.shape[0],
+                axis=0,
+            )
+            actions = np.concatenate([actions, padding], axis=0)
         action = (
-            episode.action[frame_index] - self.normalization.action_mean
+            actions - self.normalization.action_mean
         ) / self.normalization.action_std
+        if self.action_horizon == 1:
+            action = action[0]
         return {
             "observation": torch.from_numpy(observation),
             "joint_position": torch.from_numpy(joint.astype(np.float32)),
             "action": torch.from_numpy(action.astype(np.float32)),
         }
+
+
+def normalize_observation(
+    rgb: np.ndarray,
+    depth: np.ndarray,
+    joint_position: np.ndarray,
+    normalization: NormalizationStats,
+) -> tuple[np.ndarray, np.ndarray]:
+    if rgb.ndim != 3 or rgb.shape[-1] != 3:
+        raise ValueError("rgb must have shape (height, width, 3)")
+    if depth.shape != rgb.shape[:2]:
+        raise ValueError("depth shape must match rgb spatial dimensions")
+    if joint_position.shape != (6,):
+        raise ValueError("joint_position must have shape (6,)")
+    normalized_rgb = rgb.astype(np.float32) / 255.0
+    normalized_depth = (
+        depth.astype(np.float32) - normalization.depth_mean
+    ) / normalization.depth_std
+    normalized_depth = np.clip(normalized_depth, -5.0, 5.0)
+    observation = np.concatenate(
+        [normalized_rgb, normalized_depth[..., None]], axis=-1
+    )
+    observation = np.ascontiguousarray(observation.transpose(2, 0, 1))
+    normalized_joint = (
+        joint_position.astype(np.float32) - normalization.joint_mean
+    ) / normalization.joint_std
+    return observation, normalized_joint.astype(np.float32)
 
 
 class MpsSafeAdaptiveAvgPool2d(nn.Module):
@@ -241,8 +283,17 @@ class MpsSafeAdaptiveAvgPool2d(nn.Module):
 class BehaviorCloningPolicy(nn.Module):
     """Small CNN policy for RGB-D and proprioceptive observations."""
 
-    def __init__(self, *, image_channels: int = 4, state_dim: int = 6) -> None:
+    def __init__(
+        self,
+        *,
+        image_channels: int = 4,
+        state_dim: int = 6,
+        action_horizon: int = 1,
+    ) -> None:
         super().__init__()
+        if action_horizon <= 0:
+            raise ValueError("action_horizon must be positive")
+        self.action_horizon = action_horizon
         self.image_encoder = nn.Sequential(
             nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
@@ -258,14 +309,19 @@ class BehaviorCloningPolicy(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(64, 6),
+            nn.Linear(64, 6 * action_horizon),
         )
 
     def forward(
         self, observation: torch.Tensor, joint_position: torch.Tensor
     ) -> torch.Tensor:
         image_features = self.image_encoder(observation)
-        return self.action_head(torch.cat([image_features, joint_position], dim=1))
+        action = self.action_head(
+            torch.cat([image_features, joint_position], dim=1)
+        )
+        if self.action_horizon == 1:
+            return action
+        return action.reshape(action.shape[0], self.action_horizon, 6)
 
 
 def denormalize_action(
@@ -293,3 +349,81 @@ def choose_device(requested: str) -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+@dataclass
+class BehaviorCloningRunner:
+    model: BehaviorCloningPolicy
+    normalization: NormalizationStats
+    device: torch.device
+
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path: Path,
+        *,
+        device_name: str = "auto",
+    ) -> "BehaviorCloningRunner":
+        device = choose_device(device_name)
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=False,
+        )
+        if checkpoint.get("format_version") != 1:
+            raise ValueError("unsupported checkpoint format")
+        config = checkpoint["model_config"]
+        model = BehaviorCloningPolicy(
+            image_channels=int(config["image_channels"]),
+            state_dim=int(config["state_dim"]),
+            action_horizon=int(config.get("action_horizon", 1)),
+        ).to(device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model.eval()
+        return cls(
+            model=model,
+            normalization=NormalizationStats.from_dict(
+                checkpoint["normalization"]
+            ),
+            device=device,
+        )
+
+    def predict(
+        self,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        joint_position: np.ndarray,
+    ) -> np.ndarray:
+        return self.predict_chunk(rgb, depth, joint_position)[0]
+
+    @property
+    def action_horizon(self) -> int:
+        return self.model.action_horizon
+
+    def predict_chunk(
+        self,
+        rgb: np.ndarray,
+        depth: np.ndarray,
+        joint_position: np.ndarray,
+    ) -> np.ndarray:
+        observation, normalized_joint = normalize_observation(
+            rgb,
+            depth,
+            joint_position,
+            self.normalization,
+        )
+        observation_tensor = torch.from_numpy(observation).unsqueeze(0).to(
+            self.device
+        )
+        joint_tensor = torch.from_numpy(normalized_joint).unsqueeze(0).to(
+            self.device
+        )
+        with torch.no_grad():
+            normalized_action = self.model(observation_tensor, joint_tensor)
+            if normalized_action.ndim == 2:
+                normalized_action = normalized_action.unsqueeze(1)
+            action = denormalize_action(
+                normalized_action,
+                self.normalization,
+            )
+        return action.squeeze(0).cpu().numpy().astype(np.float64)

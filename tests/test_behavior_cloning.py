@@ -6,6 +6,7 @@ import torch
 from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
     BehaviorCloningPolicy,
+    BehaviorCloningRunner,
     MpsSafeAdaptiveAvgPool2d,
     compute_normalization,
     discover_episodes,
@@ -80,6 +81,19 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
     )
     assert prediction.shape == (1, 6)
 
+    chunk_dataset = BehaviorCloningDataset(
+        episode_data,
+        normalization,
+        action_horizon=3,
+    )
+    assert chunk_dataset[0]["action"].shape == (3, 6)
+    chunk_policy = BehaviorCloningPolicy(action_horizon=3)
+    chunk_prediction = chunk_policy(
+        sample["observation"].unsqueeze(0),
+        sample["joint_position"].unsqueeze(0),
+    )
+    assert chunk_prediction.shape == (1, 3, 6)
+
 
 def test_mps_safe_pool_matches_native_adaptive_pool() -> None:
     feature_map = torch.arange(2 * 3 * 15 * 20, dtype=torch.float32).reshape(
@@ -104,6 +118,7 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
         validation_fraction=0.5,
         seed=3,
         device_name="cpu",
+        action_horizon=3,
     )
 
     assert checkpoint_path.exists()
@@ -117,6 +132,7 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
         device_name="cpu",
     )
     assert metrics["samples"] == 4
+    assert metrics["action_vectors"] == 12
     assert np.isfinite(metrics["normalized_mse"])
     saved_report = json.loads(
         (output_dir / "training_metrics.json").read_text(encoding="utf-8")
@@ -124,3 +140,17 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
     assert saved_report["best_epoch"] == 1
     checkpoint = torch.load(checkpoint_path, weights_only=False)
     assert checkpoint["successful_only"] is True
+    assert checkpoint["model_config"]["action_horizon"] == 3
+
+    with np.load(dataset_dir / "episode_00000.npz") as arrays:
+        runner = BehaviorCloningRunner.from_checkpoint(
+            checkpoint_path,
+            device_name="cpu",
+        )
+        action_chunk = runner.predict_chunk(
+            arrays["rgb"][0],
+            arrays["depth"][0],
+            arrays["joint_position"][0],
+        )
+    assert action_chunk.shape == (3, 6)
+    assert np.all(np.isfinite(action_chunk))
