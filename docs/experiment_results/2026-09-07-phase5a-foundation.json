@@ -38,11 +38,13 @@
   },
   "dataset": {
     "path": "data/goal_demonstrations",
-    "successful_episodes": 20,
+    "locked_foundation_episode_range": [0, 19],
+    "locked_foundation_successful_episodes": 20,
     "samples_per_episode": 68,
     "schema_version": 1,
     "optional_array": "goal",
-    "task_version": "phase5a-v1"
+    "task_version": "phase5a-v1",
+    "note": "subsequent scaled collection is recorded separately in the Phase 5B result"
   },
   "decision": "foundation accepted; proceed to goal-conditioned policy training with held-out combination evaluation"
 }

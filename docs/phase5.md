@@ -77,6 +77,28 @@ The machine-readable foundation result is
 
 ## Next build
 
-Train a goal-conditioned action-chunk policy and hold out at least one object-target combination from
-training. Promotion will require correct-object and correct-target placement on unseen positions and
-the held-out combination; action loss alone is not sufficient.
+The behavior-cloning pipeline now accepts optional four-value goals and can reserve one combination
+with `--holdout-goal OBJECT:TARGET`. The held-out episodes are never used for parameter updates or
+checkpoint selection.
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 \
+  --holdout-goal purple:yellow --device mps \
+  --output-dir outputs/phase5/goal_bc/data80_seed7
+
+./scripts/run_goal_policy_rollout.sh \
+  outputs/phase5/goal_bc/data80_seed7/bc_policy.pt \
+  --goal purple:yellow --episodes 10 --seed 1409 --device mps
+```
+
+The first 20-demo model reached held-out offline MAE 0.0672 but scored 0/10 on held-out rollout and
+0/5 on a seen red-to-green goal. Scaling collection to 78 successful episodes reduced held-out MAE
+to 0.0518 and produced 2/10 on a fresh seen-goal rollout, but held-out rollout remained 0/10.
+Therefore this model is a baseline, not a promoted policy.
+
+The next experiment should address temporal state rather than add more of the same trajectories.
+The 13.6-second expert behavior contains approach, grasp, transport, place, and retreat stages, while
+the current policy receives no stage/history signal. A phase-conditioned or recurrent policy is the
+next controlled hypothesis. Promotion still requires correct-object and correct-target placement;
+action loss alone is insufficient.

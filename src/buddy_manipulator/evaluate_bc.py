@@ -24,7 +24,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a behavior-cloning checkpoint.")
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("dataset_dir", type=Path, nargs="?", default=Path("data/demonstrations"))
-    parser.add_argument("--split", choices=("validation", "train", "all"), default="validation")
+    parser.add_argument(
+        "--split",
+        choices=("validation", "train", "test", "all"),
+        default="validation",
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "mps", "cuda"))
     return parser.parse_args()
@@ -65,6 +69,7 @@ def evaluate_checkpoint(
         state_dim=int(config["state_dim"]),
         action_horizon=int(config.get("action_horizon", 1)),
         use_object_features=bool(config.get("use_object_features", False)),
+        goal_dim=int(config.get("goal_dim", 0)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     metrics = evaluate_policy(model, loader, normalization, device)

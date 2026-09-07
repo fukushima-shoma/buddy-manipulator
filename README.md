@@ -203,5 +203,16 @@ routeする。未使用だった3 rollout seedsの合計で、ensemble単体の6
 ```
 
 各frameにはRGB-D・joint state・actionに加えて4次元goal vectorが保存される。現段階では
-structured instructionとscripted RGB-D/IK expertを使い、次のbuildでgoal-conditioned policyを
-学習する。詳細は[docs/phase5.md](docs/phase5.md)を参照。
+structured instructionとscripted RGB-D/IK expertを使う。Goal-conditioned BC baselineを
+学習・closed-loop評価する場合:
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 --holdout-goal purple:yellow \
+  --output-dir outputs/phase5/goal_bc/data80_seed7
+./scripts/run_goal_policy_rollout.sh \
+  outputs/phase5/goal_bc/data80_seed7/bc_policy.pt \
+  --goal purple:yellow --episodes 10 --device mps
+```
+
+詳細は[docs/phase5.md](docs/phase5.md)を参照。

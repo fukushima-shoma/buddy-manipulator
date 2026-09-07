@@ -116,7 +116,22 @@ def parse_args() -> argparse.Namespace:
         default="replacement",
         help="How source-balanced samples are selected within each epoch.",
     )
+    parser.add_argument(
+        "--holdout-goal",
+        default=None,
+        metavar="OBJECT:TARGET",
+        help="Reserve one goal combination as a test-only compositional split.",
+    )
     return parser.parse_args()
+
+
+def parse_goal_pair(value: str | None) -> tuple[str, str] | None:
+    if value is None:
+        return None
+    parts = value.split(":")
+    if len(parts) != 2 or not all(parts):
+        raise ValueError("holdout goal must use OBJECT:TARGET")
+    return parts[0], parts[1]
 
 
 def failure_replay_sample_weights(
@@ -283,7 +298,12 @@ def evaluate_policy(
             observation = batch["observation"].to(device)
             joint_position = batch["joint_position"].to(device)
             target = batch["action"].to(device)
-            prediction = model(observation, joint_position)
+            goal = batch.get("goal")
+            prediction = model(
+                observation,
+                joint_position,
+                goal.to(device) if goal is not None else None,
+            )
             squared_error_sum += float(torch.square(prediction - target).sum().cpu())
             predicted_action = denormalize_action(prediction, normalization)
             target_action = denormalize_action(target, normalization)
@@ -328,6 +348,7 @@ def train(
     preserve_checkpoint_split: bool = False,
     reuse_checkpoint_normalization: bool = False,
     freeze_image_encoder: bool = False,
+    holdout_goal: tuple[str, str] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -346,6 +367,12 @@ def train(
     torch.manual_seed(model_seed)
 
     paths = discover_episodes(dataset_dir, successful_only=successful_only)
+    test_paths = []
+    if holdout_goal is not None:
+        test_paths = [path for path in paths if path.task_goal == holdout_goal]
+        paths = [path for path in paths if path.task_goal != holdout_goal]
+        if not test_paths:
+            raise ValueError(f"holdout goal has no episodes: {holdout_goal}")
     initialization_checkpoint = None
     if initialize_from is not None:
         initialization_checkpoint = torch.load(
@@ -381,6 +408,7 @@ def train(
         raise ValueError(f"unknown split strategy: {split_strategy}")
     train_episodes = load_episodes(train_paths)
     validation_episodes = load_episodes(validation_paths)
+    test_episodes = load_episodes(test_paths)
     if reuse_checkpoint_normalization:
         if initialization_checkpoint is None:
             raise ValueError("reuse_checkpoint_normalization requires initialize_from")
@@ -399,6 +427,17 @@ def train(
         normalization,
         action_horizon=action_horizon,
     )
+    test_dataset = (
+        BehaviorCloningDataset(
+            test_episodes,
+            normalization,
+            action_horizon=action_horizon,
+        )
+        if test_episodes
+        else None
+    )
+    if train_dataset.goal_dim != validation_dataset.goal_dim:
+        raise ValueError("train and validation goal dimensions must match")
     generator = torch.Generator().manual_seed(sampler_seed)
     if failure_replay_fraction is None:
         if source_sampling != "replacement":
@@ -464,11 +503,17 @@ def train(
     else:
         raise ValueError(f"unknown source sampling strategy: {source_sampling}")
     validation_loader = DataLoader(validation_dataset, batch_size=batch_size)
+    test_loader = (
+        DataLoader(test_dataset, batch_size=batch_size)
+        if test_dataset is not None
+        else None
+    )
 
     device = choose_device(device_name)
     model = BehaviorCloningPolicy(
         action_horizon=action_horizon,
         use_object_features=use_object_features,
+        goal_dim=int(train_dataset.goal_dim or 0),
     ).to(device)
     if initialization_checkpoint is not None:
         initial_config = initialization_checkpoint["model_config"]
@@ -479,6 +524,8 @@ def train(
             and int(initial_config.get("action_horizon", 1)) == action_horizon
             and bool(initial_config.get("use_object_features", False))
             == use_object_features
+            and int(initial_config.get("goal_dim", 0))
+            == int(train_dataset.goal_dim or 0)
         )
         if not compatible:
             raise ValueError("initialization checkpoint model config is incompatible")
@@ -537,7 +584,12 @@ def train(
             joint_position = batch["joint_position"].to(device)
             target = batch["action"].to(device)
             optimizer.zero_grad(set_to_none=True)
-            prediction = model(observation, joint_position)
+            goal = batch.get("goal")
+            prediction = model(
+                observation,
+                joint_position,
+                goal.to(device) if goal is not None else None,
+            )
             loss = loss_function(prediction, target)
             loss.backward()
             optimizer.step()
@@ -563,6 +615,12 @@ def train(
             best_state = copy.deepcopy(model.state_dict())
 
     assert best_state is not None and best_metrics is not None
+    model.load_state_dict(best_state)
+    test_metrics = (
+        evaluate_policy(model, test_loader, normalization, device)
+        if test_loader is not None
+        else None
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = output_dir / "bc_policy.pt"
     checkpoint = {
@@ -574,10 +632,13 @@ def train(
             "action_dim": 6,
             "action_horizon": action_horizon,
             "use_object_features": use_object_features,
+            "goal_dim": int(train_dataset.goal_dim or 0),
         },
         "normalization": normalization.to_dict(),
         "train_episodes": [path.name for path in train_paths],
         "validation_episodes": [path.name for path in validation_paths],
+        "test_episodes": [path.name for path in test_paths],
+        "holdout_goal": list(holdout_goal) if holdout_goal else None,
         "successful_only": successful_only,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
@@ -602,6 +663,7 @@ def train(
         "epochs": epochs,
         "action_horizon": action_horizon,
         "use_object_features": use_object_features,
+        "goal_dim": int(train_dataset.goal_dim or 0),
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
         "split_strategy": split_strategy,
@@ -617,7 +679,10 @@ def train(
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],
+        "test_episodes": checkpoint["test_episodes"],
+        "holdout_goal": checkpoint["holdout_goal"],
         "best_validation_metrics": best_metrics,
+        "test_metrics": test_metrics,
         "history": history,
     }
     metrics_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -651,6 +716,7 @@ def main() -> None:
         preserve_checkpoint_split=args.preserve_checkpoint_split,
         reuse_checkpoint_normalization=args.reuse_checkpoint_normalization,
         freeze_image_encoder=args.freeze_image_encoder,
+        holdout_goal=parse_goal_pair(args.holdout_goal),
     )
 
 

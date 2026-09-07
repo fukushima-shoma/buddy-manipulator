@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 
 import numpy as np
@@ -45,6 +47,7 @@ def write_episode(
     offset: float,
     source: str = "scripted",
     block_position: tuple[float, float, float] = (0.3, 0.08, 0.025),
+    task_goal: tuple[str, str] | None = None,
 ) -> None:
     samples = 4
     rng = np.random.default_rng(index)
@@ -65,6 +68,24 @@ def write_episode(
             (samples, 1),
         ),
     }
+    goal_metadata = None
+    if task_goal is not None:
+        object_color, target_color = task_goal
+        goal_vector = np.asarray(
+            [
+                object_color == "red",
+                object_color == "purple",
+                target_color == "green",
+                target_color == "yellow",
+            ],
+            dtype=np.float32,
+        )
+        arrays["goal"] = np.repeat(goal_vector[None], samples, axis=0)
+        goal_metadata = {
+            "object_color": object_color,
+            "target_color": target_color,
+            "instruction": f"place the {object_color} block in the {target_color} zone",
+        }
     save_episode(
         directory,
         index,
@@ -72,6 +93,7 @@ def write_episode(
         success=success,
         block_start_position=block_position,
         source=source,
+        task_goal=goal_metadata,
     )
 
 
@@ -186,6 +208,19 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
         sample["joint_position"].unsqueeze(0),
     )
     assert object_prediction.shape == (1, 3, 6)
+
+    goal_policy = BehaviorCloningPolicy(action_horizon=3, goal_dim=4)
+    goal_prediction = goal_policy(
+        sample["observation"].unsqueeze(0),
+        sample["joint_position"].unsqueeze(0),
+        torch.tensor([[1.0, 0.0, 1.0, 0.0]]),
+    )
+    assert goal_prediction.shape == (1, 3, 6)
+    with pytest.raises(ValueError, match="goal must have shape"):
+        goal_policy(
+            sample["observation"].unsqueeze(0),
+            sample["joint_position"].unsqueeze(0),
+        )
 
 
 def test_red_object_features_preserve_image_location_and_depth() -> None:
@@ -334,6 +369,52 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
         )
     assert action_chunk.shape == (3, 6)
     assert np.all(np.isfinite(action_chunk))
+
+
+def test_goal_training_keeps_combination_test_only(tmp_path) -> None:
+    dataset_dir = tmp_path / "goals"
+    combinations = [
+        ("red", "green"),
+        ("red", "yellow"),
+        ("purple", "green"),
+        ("purple", "yellow"),
+    ]
+    for index in range(8):
+        write_episode(
+            dataset_dir,
+            index,
+            success=True,
+            offset=index * 0.01,
+            task_goal=combinations[index % 4],
+        )
+
+    checkpoint_path, report = train(
+        dataset_dir,
+        tmp_path / "goal_output",
+        epochs=1,
+        batch_size=4,
+        validation_fraction=0.2,
+        seed=7,
+        device_name="cpu",
+        action_horizon=3,
+        holdout_goal=("purple", "yellow"),
+    )
+
+    assert report["goal_dim"] == 4
+    assert report["holdout_goal"] == ["purple", "yellow"]
+    assert len(report["test_episodes"]) == 2
+    assert report["test_metrics"]["samples"] == 8
+    assert set(report["test_episodes"]).isdisjoint(report["train_episodes"])
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    assert checkpoint["model_config"]["goal_dim"] == 4
+    metrics = evaluate_checkpoint(
+        checkpoint_path,
+        dataset_dir,
+        split="test",
+        batch_size=4,
+        device_name="cpu",
+    )
+    assert metrics["samples"] == 8
 
 
 def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:

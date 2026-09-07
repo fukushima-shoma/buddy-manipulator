@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-07",
+  "phase": "5B",
+  "objective": "train and evaluate a goal-conditioned action-chunk behavior-cloning baseline",
+  "model": {
+    "observation": ["RGB-D", "six joint positions", "four-value task goal"],
+    "action_horizon": 8,
+    "holdout_goal": ["purple", "yellow"],
+    "checkpoint_selection": "seen-goal validation normalized MSE",
+    "holdout_used_for_selection": false
+  },
+  "data20": {
+    "successful_episodes": 20,
+    "train_episodes": 12,
+    "validation_episodes": 3,
+    "test_episodes": 5,
+    "best_epoch": 46,
+    "validation_mean_action_mae": 0.06207657706302901,
+    "holdout_mean_action_mae": 0.06721916822351369,
+    "seen_rollout": {"successes": 0, "trials": 5, "seed": 1207},
+    "holdout_rollout": {"successes": 0, "trials": 10, "seed": 1106}
+  },
+  "scaled_data": {
+    "collection_attempts": 80,
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "best_epoch": 50,
+    "validation_mean_action_mae": 0.04464803710869008,
+    "holdout_mean_action_mae": 0.05180408566283957,
+    "seen_rollout": {"successes": 2, "trials": 10, "seed": 1308},
+    "holdout_rollout": {"successes": 0, "trials": 10, "seed": 1409}
+  },
+  "finding": "data scaling improved offline metrics and seen closed-loop success slightly, but did not produce compositional task success",
+  "decision": "baseline retained but not promoted; next test phase or history conditioning"
+}
