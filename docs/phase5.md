@@ -71,7 +71,9 @@ The locked seed-905 foundation benchmark completed 20/20 tasks. Earlier diagnost
 recorded three design changes: slower transport alone was insufficient; retract-rotate-extend
 waypoints removed long-radius throws; and the valid X/separation envelope removed unstable close-in
 grasps and distractor collisions. Superseded runs are retained under
-`outputs/phase5/goal_diagnostics/`; the clean training directory contains only the locked 20/20 run.
+`outputs/phase5/goal_diagnostics/`. Episodes 0-19 in the training directory are the locked 20/20
+foundation run. Phase 5B then scaled the directory to 80 attempts and 78 successes; the two retained
+failures are excluded from BC training by the default success filter.
 The machine-readable foundation result is
 `docs/experiment_results/2026-09-07-phase5a-foundation.json`.
 
