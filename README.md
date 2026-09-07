@@ -154,6 +154,19 @@ Pythonの実行architectureは切り替わらない。NumPy、MuJoCo、将来の
   --headless
 ```
 
+Behavior-cloning baselineと同じ8-step action chunkをconditional diffusionで学習する場合:
+
+```bash
+./scripts/run_diffusion_training.sh data/demonstrations \
+  --epochs 100 --device mps \
+  --output-dir outputs/phase4/diffusion/seed7
+
+./scripts/run_policy_rollout.sh \
+  outputs/phase4/diffusion/seed7/diffusion_policy.pt \
+  --episodes 30 --seed 404 --headless \
+  --output outputs/phase4/diffusion/seed7/rollout_seed404.json
+```
+
 checkpointとtraining metricsは`outputs/phase4/`へ保存される。失敗episodeはdefaultでは
 学習から除外する。closed-loop rolloutの結果も同じdirectoryへ保存される。
 失敗配置からexpert dataを再収集し、paired rolloutを比較するfailure-driven loopも利用できる。
@@ -163,5 +176,7 @@ seed間のばらつきを`summary.json`へ保存する。`--vary-seed split|mode
 seed要因を固定したcontrolled ablationも実行できる。`--split-strategy spatial`および
 `--source-sampling minimal-replacement|without-replacement`は研究比較用optionであり、現時点の
 recommended settingではない。
+モデル変更の仮説・評価結果・採否は`docs/experiments.md`へ記録する。Offline lossだけでは昇格させず、
+同じblock配置でのpaired closed-loop successを主指標にする。
 モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。

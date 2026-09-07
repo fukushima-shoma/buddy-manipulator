@@ -16,13 +16,20 @@ from buddy_manipulator.behavior_cloning import (
     split_episodes_spatially,
 )
 from buddy_manipulator.dataset import save_episode
+from buddy_manipulator.diffusion_policy import (
+    DiffusionPolicy,
+    DiffusionPolicyRunner,
+    cosine_beta_schedule,
+)
 from buddy_manipulator.evaluate_bc import evaluate_checkpoint
+from buddy_manipulator.rollout_bc import load_policy_runner
 from buddy_manipulator.train_bc import (
     MinimalReplacementSourceSampler,
     SourceBalancedSampler,
     failure_replay_sample_weights,
     train,
 )
+from buddy_manipulator.train_diffusion import train as train_diffusion
 
 
 def write_episode(
@@ -312,3 +319,91 @@ def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:
             validation_fraction=0.5,
             source_sampling="without-replacement",
         )
+
+
+def test_diffusion_policy_shapes_schedule_and_sampling() -> None:
+    policy = DiffusionPolicy(
+        action_horizon=3,
+        diffusion_steps=8,
+        condition_dim=16,
+        hidden_dim=32,
+        residual_blocks=1,
+    )
+    observation = torch.zeros((2, 4, 16, 16), dtype=torch.float32)
+    joint_position = torch.zeros((2, 6), dtype=torch.float32)
+    action = torch.zeros((2, 3, 6), dtype=torch.float32)
+    noise = torch.ones_like(action)
+    timesteps = torch.tensor((0, 7), dtype=torch.long)
+
+    noisy_action = policy.add_noise(action, noise, timesteps)
+    predicted_noise = policy(
+        observation,
+        joint_position,
+        noisy_action,
+        timesteps,
+    )
+    sampled_action = policy.sample(
+        observation,
+        joint_position,
+        noise,
+        inference_steps=4,
+    )
+
+    assert cosine_beta_schedule(8).shape == (8,)
+    assert torch.all(policy.alphas_cumprod[1:] < policy.alphas_cumprod[:-1])
+    assert predicted_noise.shape == action.shape
+    assert sampled_action.shape == action.shape
+    assert torch.all(torch.isfinite(sampled_action))
+
+
+def test_diffusion_training_writes_rollout_compatible_checkpoint(tmp_path) -> None:
+    dataset_dir = tmp_path / "data"
+    output_dir = tmp_path / "output"
+    write_episode(dataset_dir, 0, success=True, offset=0.0, source="scripted")
+    write_episode(
+        dataset_dir,
+        1,
+        success=True,
+        offset=0.1,
+        source="failure_replay",
+    )
+    checkpoint_path, report = train_diffusion(
+        dataset_dir,
+        output_dir,
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.5,
+        seed=3,
+        action_horizon=3,
+        diffusion_steps=4,
+        inference_steps=2,
+        condition_dim=16,
+        hidden_dim=32,
+        residual_blocks=1,
+        failure_replay_fraction=None,
+        device_name="cpu",
+    )
+
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    assert checkpoint["policy_type"] == "diffusion"
+    assert checkpoint["model_config"]["action_horizon"] == 3
+    assert report["status"] == "trained_pending_rollout"
+    assert (output_dir / "experiment.json").exists()
+
+    runner = load_policy_runner(checkpoint_path, device_name="cpu")
+    assert isinstance(runner, DiffusionPolicyRunner)
+    with np.load(dataset_dir / "episode_00000.npz") as arrays:
+        runner.reset(11)
+        first = runner.predict_chunk(
+            arrays["rgb"][0],
+            arrays["depth"][0],
+            arrays["joint_position"][0],
+        )
+        runner.reset(11)
+        second = runner.predict_chunk(
+            arrays["rgb"][0],
+            arrays["depth"][0],
+            arrays["joint_position"][0],
+        )
+    assert first.shape == (3, 6)
+    assert first == pytest.approx(second)

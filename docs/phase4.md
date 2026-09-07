@@ -299,6 +299,24 @@ weighted replacementの重複は一部trajectoryを暗黙に強調していた�
 しない。`outputs/phase4/chunked/bc_policy.pt`を引き続きbaselineとし、次はmultimodal action
 distributionを直接扱えるDiffusion Policyを比較対象として実装する。
 
+## Conditional Diffusion Policy
+
+DIFF-01では、BCと同じRGB-D・joint stateから8-step action chunk全体を生成するconditional
+diffusion modelを追加した。学習時にはnormalized actionへcosine scheduleでnoiseを加え、CNNで
+encodeした観測を条件としてnoiseを予測する。推論にはEMA weightsとdeterministic DDIMを使う。
+
+```bash
+./scripts/run_diffusion_training.sh data/demonstrations \
+  --epochs 100 --action-horizon 8 \
+  --diffusion-steps 50 --inference-steps 10 \
+  --failure-replay-fraction 0.2 --device mps \
+  --output-dir outputs/phase4/diffusion/seed7
+```
+
+生成された`experiment.json`にはhypothesis、全configuration、seed、epoch history、offline metricsを
+保存する。Rolloutは既存の`run_policy_rollout.sh`をそのまま使うため、control rate、action limit、
+success判定はBC baselineと同一である。設計判断とpromotion decisionは`docs/experiments.md`に残す。
+
 ## Current limitations
 
 - Dataset size is still small; the current goal is pipeline validation, not robust generalization.

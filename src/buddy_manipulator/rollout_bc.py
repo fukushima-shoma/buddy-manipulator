@@ -7,8 +7,10 @@ import json
 from pathlib import Path
 import random
 import time
+from typing import Any
 
 import numpy as np
+import torch
 
 from buddy_manipulator.behavior_cloning import BehaviorCloningRunner
 from buddy_manipulator.collect_demos import sample_block_position, set_block_position
@@ -16,6 +18,33 @@ from buddy_manipulator.kinematics import JointAngles
 from buddy_manipulator.policy_rollout import run_closed_loop_policy
 from buddy_manipulator.sim_camera import RgbdCamera
 from buddy_manipulator.simulation import Keyframe, load_model, run_keyframes
+
+
+def load_policy_runner(
+    checkpoint_path: Path,
+    *,
+    device_name: str = "auto",
+) -> Any:
+    """Load either the historical BC runner or a newer policy family."""
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    policy_type = checkpoint.get("policy_type", "behavior_cloning")
+    if policy_type == "behavior_cloning":
+        return BehaviorCloningRunner.from_checkpoint(
+            checkpoint_path,
+            device_name=device_name,
+        )
+    if policy_type == "diffusion":
+        from buddy_manipulator.diffusion_policy import DiffusionPolicyRunner
+
+        return DiffusionPolicyRunner.from_checkpoint(
+            checkpoint_path,
+            device_name=device_name,
+        )
+    raise ValueError(f"unsupported policy type: {policy_type}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,7 +82,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_episode(
-    policy: BehaviorCloningRunner,
+    policy: Any,
     block_position: tuple[float, float, float],
     args: argparse.Namespace,
 ):
@@ -122,7 +151,7 @@ def main() -> None:
         or args.execute_chunk_steps < 0
     ):
         raise ValueError("episodes and image dimensions must be positive")
-    policy = BehaviorCloningRunner.from_checkpoint(
+    policy = load_policy_runner(
         args.checkpoint,
         device_name=args.device,
     )
@@ -130,6 +159,8 @@ def main() -> None:
     episode_results = []
     print(f"policy device: {policy.device}", flush=True)
     for episode_index in range(args.episodes):
+        if hasattr(policy, "reset"):
+            policy.reset(args.seed * 100_000 + episode_index)
         block_position = sample_block_position(rng)
         result = run_episode(policy, block_position, args)
         record = {
@@ -149,6 +180,7 @@ def main() -> None:
     summary = {
         "checkpoint": str(args.checkpoint),
         "device": str(policy.device),
+        "policy_type": type(policy).__name__,
         "seed": args.seed,
         "episode_count": args.episodes,
         "action_horizon": policy.action_horizon,
