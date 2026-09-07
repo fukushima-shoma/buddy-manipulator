@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import random
@@ -18,6 +19,43 @@ from buddy_manipulator.kinematics import JointAngles
 from buddy_manipulator.policy_rollout import run_closed_loop_policy
 from buddy_manipulator.sim_camera import RgbdCamera
 from buddy_manipulator.simulation import Keyframe, load_model, run_keyframes
+
+
+@dataclass
+class AveragingPolicyRunner:
+    """Average action chunks from policies with the same horizon."""
+
+    policies: list[Any]
+
+    def __post_init__(self) -> None:
+        if len(self.policies) < 2:
+            raise ValueError("an ensemble needs at least two policies")
+        horizons = {policy.action_horizon for policy in self.policies}
+        if len(horizons) != 1:
+            raise ValueError("ensemble policies must use the same action horizon")
+
+    @property
+    def action_horizon(self) -> int:
+        return int(self.policies[0].action_horizon)
+
+    @property
+    def device(self):
+        return self.policies[0].device
+
+    def reset(self, seed: int | None = None) -> None:
+        for policy in self.policies:
+            if hasattr(policy, "reset"):
+                policy.reset(seed)
+
+    def predict_chunk(self, rgb, depth, joint_position) -> np.ndarray:
+        chunks = [
+            policy.predict_chunk(rgb, depth, joint_position)
+            for policy in self.policies
+        ]
+        return np.mean(np.stack(chunks), axis=0)
+
+    def predict(self, rgb, depth, joint_position) -> np.ndarray:
+        return self.predict_chunk(rgb, depth, joint_position)[0]
 
 
 def load_policy_runner(
@@ -59,6 +97,13 @@ def parse_args() -> argparse.Namespace:
         description="Evaluate a behavior-cloning policy in closed-loop MuJoCo."
     )
     parser.add_argument("checkpoint", type=Path)
+    parser.add_argument(
+        "--ensemble-checkpoint",
+        action="append",
+        type=Path,
+        default=[],
+        help="Additional checkpoint to average with the primary policy; repeatable.",
+    )
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--seed", type=int, default=101)
     parser.add_argument("--control-hz", type=float, default=5.0)
@@ -194,6 +239,17 @@ def main() -> None:
         if not hasattr(policy, "residual_blend"):
             raise ValueError("--residual-blend requires a residual diffusion checkpoint")
         policy.configure_sampling(residual_blend=args.residual_blend)
+    ensemble_checkpoints = [args.checkpoint, *args.ensemble_checkpoint]
+    if args.ensemble_checkpoint:
+        policy = AveragingPolicyRunner(
+            [
+                policy,
+                *(
+                    load_policy_runner(path, device_name=args.device)
+                    for path in args.ensemble_checkpoint
+                ),
+            ]
+        )
     rng = random.Random(args.seed)
     episode_results = []
     print(f"policy device: {policy.device}", flush=True)
@@ -220,6 +276,7 @@ def main() -> None:
         "checkpoint": str(args.checkpoint),
         "device": str(policy.device),
         "policy_type": type(policy).__name__,
+        "ensemble_checkpoints": [str(path) for path in ensemble_checkpoints],
         "diffusion_inference_steps": getattr(policy, "inference_steps", None),
         "diffusion_noise_scale": getattr(policy, "initial_noise_scale", None),
         "residual_blend": getattr(policy, "residual_blend", None),

@@ -24,6 +24,7 @@ and cannot promote a model by itself. The standard robustness check uses trainin
 | DIFF-03 | A proven BC prior can prevent visual-conditioning collapse while diffusion learns corrections. | Freeze the BC policy and diffuse only its normalized action residual. | Pending. | Pending. |
 | DATA-03 | Broader corrective coverage will improve weak workspace regions. | Add one expert trajectory at all 43 failures from rollout seeds 404/505/606, then cap replay at 20%. | 13/30 on fresh seed 707 versus baseline 16/30. | Rejected alone. |
 | VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Pending. | Pending. |
+| ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | Pending. | Pending. |
 
 ## DIFF-01 design decision
 
@@ -70,3 +71,8 @@ Failure analysis repeatedly points to initial base-yaw localization. The standar
 VISION-01 appends four observable RGB-D features: red-mask centroid X/Y, normalized masked depth,
 and mask area. It does not use simulator object state and remains compatible with a real RGB-D
 camera. The CNN remains present, so the bottleneck augments rather than replaces learned vision.
+
+VISION-01 seed 7 reached 17/30 on fresh rollout seed 1001, compared with baseline 18/30. The result
+does not support promotion of a single model. ENS-01 keeps split seed 7 and sampler seed 7 fixed,
+changes only model initialization seeds 7/17/27, and averages their physical action chunks. Unlike
+selecting the best random seed, this uses all prespecified models and directly targets variance.

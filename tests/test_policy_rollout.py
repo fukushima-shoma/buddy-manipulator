@@ -11,6 +11,7 @@ from buddy_manipulator.policy_rollout import (
     rate_limit_action,
     run_closed_loop_policy,
 )
+from buddy_manipulator.rollout_bc import AveragingPolicyRunner
 from buddy_manipulator.simulation import (
     Keyframe,
     _mujoco,
@@ -43,6 +44,16 @@ class EmptyCamera:
         )
 
 
+class ConstantChunkPolicy:
+    def __init__(self, value: float, horizon: int = 3) -> None:
+        self.value = value
+        self.action_horizon = horizon
+        self.device = "cpu"
+
+    def predict_chunk(self, _rgb, _depth, _joint_position) -> np.ndarray:
+        return np.full((self.action_horizon, 6), self.value)
+
+
 def test_rate_limit_action_limits_delta_and_actuator_range() -> None:
     model = SimpleNamespace(
         actuator_ctrlrange=np.asarray(
@@ -68,6 +79,17 @@ def test_rate_limit_action_limits_delta_and_actuator_range() -> None:
     )
 
     assert limited == pytest.approx((1.0, -0.2, 0.1, -0.1, 0.01, 0.03))
+
+
+def test_averaging_policy_runner_averages_matching_chunks() -> None:
+    runner = AveragingPolicyRunner(
+        [ConstantChunkPolicy(1.0), ConstantChunkPolicy(3.0)]
+    )
+
+    chunk = runner.predict_chunk(None, None, None)
+
+    assert runner.action_horizon == 3
+    assert chunk == pytest.approx(np.full((3, 6), 2.0))
 
 
 def test_controlled_joint_positions_follow_model_order() -> None:
