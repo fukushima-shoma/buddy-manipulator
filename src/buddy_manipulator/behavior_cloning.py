@@ -18,6 +18,7 @@ from torch.utils.data import Dataset
 class EpisodePath:
     data_path: Path
     metadata_path: Path
+    source: str
 
     @property
     def name(self) -> str:
@@ -27,6 +28,7 @@ class EpisodePath:
 @dataclass(frozen=True)
 class EpisodeData:
     name: str
+    source: str
     rgb: np.ndarray
     depth: np.ndarray
     joint_position: np.ndarray
@@ -82,7 +84,13 @@ def discover_episodes(
         data_path = metadata_path.with_suffix(".npz")
         if not data_path.exists():
             raise FileNotFoundError(f"missing data for {metadata_path.name}")
-        episodes.append(EpisodePath(data_path, metadata_path))
+        episodes.append(
+            EpisodePath(
+                data_path=data_path,
+                metadata_path=metadata_path,
+                source=str(metadata.get("source", "legacy")),
+            )
+        )
     return episodes
 
 
@@ -124,6 +132,7 @@ def load_episodes(episode_paths: Sequence[EpisodePath]) -> list[EpisodeData]:
             episodes.append(
                 EpisodeData(
                     name=episode_path.name,
+                    source=episode_path.source,
                     rgb=arrays["rgb"].copy(),
                     depth=arrays["depth"].astype(np.float32, copy=True),
                     joint_position=arrays["joint_position"].astype(
@@ -182,6 +191,11 @@ class BehaviorCloningDataset(Dataset):
             (episode_index, frame_index)
             for episode_index, episode in enumerate(self.episodes)
             for frame_index in range(episode.sample_count)
+        ]
+        self.sample_sources = [
+            episode.source
+            for episode in self.episodes
+            for _ in range(episode.sample_count)
         ]
 
     def __len__(self) -> int:

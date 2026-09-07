@@ -168,7 +168,35 @@ leakageを避けるため、改善比較には収集元と異なるseedを使う
 改善した一方、paired closed-loop successは15/30（50%）から13/30（43%）となり、task-level
 improvementは確認できなかった。Naive replayによる分布の偏りとtraining varianceを分離する
 には、source-balanced sampling、複数training seeds、より多いpaired trialsが必要である。
-現時点では54-episodeの`outputs/phase4/chunked/bc_policy.pt`をrecommended checkpointとする。
+
+### Source-balanced replay
+
+`failure_replay`がdataset内で増えすぎる場合、`--failure-replay-fraction`で1 epoch中の期待sampling
+比率を指定できる。samplingはframe単位・replacementありで行い、epochあたりのsample数は自然な
+samplingと同じに保つ。validation setにはweightを適用しない。
+
+```bash
+./scripts/run_training.sh data/demonstrations \
+  --epochs 30 --action-horizon 8 \
+  --failure-replay-fraction 0.2 \
+  --output-dir outputs/phase4/balanced
+
+./scripts/run_policy_rollout.sh \
+  outputs/phase4/balanced/bc_policy.pt \
+  --episodes 30 --seed 404 --headless \
+  --output outputs/phase4/balanced/rollout_seed404.json
+
+./scripts/compare_rollouts.sh \
+  outputs/phase4/chunked/rollout_seed404_before.json \
+  outputs/phase4/balanced/rollout_seed404.json \
+  --output outputs/phase4/balanced/paired_comparison.json
+```
+
+89成功episodeを使い、failure replayを20%へ抑えた8-step modelは同じseed 404の30配置で
+16/30（53%）に達した。54-episode baselineの15/30（50%）に対して、5失敗を回復し4成功が
+退行したため、net improvementは1 episode（+3 percentage points）である。候補checkpointは
+`outputs/phase4/balanced/bc_policy.pt`だが、差が小さいため複数training seedとより多いtrialで
+再現性を確認するまでは、54-episode modelも比較baselineとして保持する。
 
 ## Current limitations
 
@@ -176,3 +204,4 @@ improvementは確認できなかった。Naive replayによる分布の偏りと
 - Action chunks model a short future horizon but do not encode observation history.
 - Training images use one camera and one lighting configuration.
 - Failure conditions guide expert recollection, but policy-visited states are not yet relabeled as in full DAgger.
+- The source-balanced improvement is only one net success in 30 paired trials and is not yet statistically robust.

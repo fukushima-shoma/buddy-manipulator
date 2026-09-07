@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
@@ -48,7 +48,37 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Train on failed episodes too (not recommended for the baseline).",
     )
+    parser.add_argument(
+        "--failure-replay-fraction",
+        type=float,
+        default=None,
+        help=(
+            "Target fraction drawn from failure_replay episodes using "
+            "weighted sampling with replacement."
+        ),
+    )
     return parser.parse_args()
+
+
+def failure_replay_sample_weights(
+    dataset: BehaviorCloningDataset,
+    failure_replay_fraction: float,
+) -> torch.Tensor:
+    if not 0.0 < failure_replay_fraction < 1.0:
+        raise ValueError("failure_replay_fraction must be between 0 and 1")
+    replay_mask = np.asarray(
+        [source == "failure_replay" for source in dataset.sample_sources]
+    )
+    replay_count = int(replay_mask.sum())
+    broad_count = len(replay_mask) - replay_count
+    if replay_count == 0 or broad_count == 0:
+        raise ValueError(
+            "source balancing needs both failure_replay and non-replay samples"
+        )
+    weights = np.empty(len(replay_mask), dtype=np.float64)
+    weights[replay_mask] = failure_replay_fraction / replay_count
+    weights[~replay_mask] = (1.0 - failure_replay_fraction) / broad_count
+    return torch.from_numpy(weights)
 
 
 def evaluate_policy(
@@ -101,6 +131,7 @@ def train(
     device_name: str = "auto",
     successful_only: bool = True,
     action_horizon: int = 1,
+    failure_replay_fraction: float | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -131,9 +162,33 @@ def train(
         action_horizon=action_horizon,
     )
     generator = torch.Generator().manual_seed(seed)
-    train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, generator=generator
-    )
+    if failure_replay_fraction is None:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            generator=generator,
+        )
+        sampling_description = "natural"
+    else:
+        sample_weights = failure_replay_sample_weights(
+            train_dataset,
+            failure_replay_fraction,
+        )
+        sampler = WeightedRandomSampler(
+            sample_weights,
+            num_samples=len(train_dataset),
+            replacement=True,
+            generator=generator,
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+        )
+        sampling_description = (
+            f"failure_replay={failure_replay_fraction:.0%}"
+        )
     validation_loader = DataLoader(validation_dataset, batch_size=batch_size)
 
     device = choose_device(device_name)
@@ -149,7 +204,7 @@ def train(
     print(
         f"training on {device}: {len(train_paths)} episodes/"
         f"{len(train_dataset)} samples; validation {len(validation_paths)} episodes/"
-        f"{len(validation_dataset)} samples",
+        f"{len(validation_dataset)} samples; sampling={sampling_description}",
         flush=True,
     )
     for epoch in range(1, epochs + 1):
@@ -202,6 +257,7 @@ def train(
         "train_episodes": [path.name for path in train_paths],
         "validation_episodes": [path.name for path in validation_paths],
         "successful_only": successful_only,
+        "failure_replay_fraction": failure_replay_fraction,
         "best_epoch": best_epoch,
         "validation_metrics": best_metrics,
     }
@@ -212,6 +268,7 @@ def train(
         "device": str(device),
         "epochs": epochs,
         "action_horizon": action_horizon,
+        "failure_replay_fraction": failure_replay_fraction,
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],
@@ -237,6 +294,7 @@ def main() -> None:
         device_name=args.device,
         successful_only=not args.include_failures,
         action_horizon=args.action_horizon,
+        failure_replay_fraction=args.failure_replay_fraction,
     )
 
 

@@ -15,10 +15,17 @@ from buddy_manipulator.behavior_cloning import (
 )
 from buddy_manipulator.dataset import save_episode
 from buddy_manipulator.evaluate_bc import evaluate_checkpoint
-from buddy_manipulator.train_bc import train
+from buddy_manipulator.train_bc import failure_replay_sample_weights, train
 
 
-def write_episode(directory, index: int, *, success: bool, offset: float) -> None:
+def write_episode(
+    directory,
+    index: int,
+    *,
+    success: bool,
+    offset: float,
+    source: str = "scripted",
+) -> None:
     samples = 4
     rng = np.random.default_rng(index)
     arrays = {
@@ -44,6 +51,7 @@ def write_episode(directory, index: int, *, success: bool, offset: float) -> Non
         arrays,
         success=success,
         block_start_position=(0.3, 0.08, 0.025),
+        source=source,
     )
 
 
@@ -57,6 +65,7 @@ def test_episode_discovery_filters_failures_and_splits_by_episode(tmp_path) -> N
         "episode_00000",
         "episode_00002",
     ]
+    assert [episode.source for episode in episodes] == ["scripted", "scripted"]
     train_episodes, validation_episodes = split_episodes(
         episodes, validation_fraction=0.5, seed=3
     )
@@ -93,6 +102,41 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
         sample["joint_position"].unsqueeze(0),
     )
     assert chunk_prediction.shape == (1, 3, 6)
+
+
+def test_failure_replay_weights_target_requested_source_fraction(tmp_path) -> None:
+    write_episode(
+        tmp_path,
+        0,
+        success=True,
+        offset=0.0,
+        source="scripted",
+    )
+    write_episode(
+        tmp_path,
+        1,
+        success=True,
+        offset=0.1,
+        source="failure_replay",
+    )
+    episodes = load_episodes(discover_episodes(tmp_path))
+    normalization = compute_normalization(episodes)
+    dataset = BehaviorCloningDataset(episodes, normalization)
+
+    weights = failure_replay_sample_weights(dataset, 0.2).numpy()
+    replay_weight = sum(
+        weight
+        for weight, source in zip(weights, dataset.sample_sources)
+        if source == "failure_replay"
+    )
+    broad_weight = sum(
+        weight
+        for weight, source in zip(weights, dataset.sample_sources)
+        if source != "failure_replay"
+    )
+
+    assert replay_weight == 0.2
+    assert broad_weight == 0.8
 
 
 def test_mps_safe_pool_matches_native_adaptive_pool() -> None:
