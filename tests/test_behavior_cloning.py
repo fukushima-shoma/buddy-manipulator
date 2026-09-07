@@ -15,6 +15,7 @@ from buddy_manipulator.behavior_cloning import (
     discover_episodes,
     extract_red_object_features,
     extract_goal_object_features,
+    extract_goal_target_features,
     load_episodes,
     split_episodes,
     split_episodes_spatially,
@@ -314,6 +315,80 @@ def test_goal_object_features_select_requested_color() -> None:
 def test_goal_object_feature_policy_requires_goal_conditioning() -> None:
     with pytest.raises(ValueError, match="object-conditioned goal"):
         BehaviorCloningPolicy(use_goal_object_features=True)
+
+
+def test_goal_target_features_select_requested_color() -> None:
+    observation = torch.zeros((2, 4, 10, 10), dtype=torch.float32)
+    observation[:, 1, 8, 5] = 0.9
+    observation[:, 2, 8, 5] = 0.7
+    observation[:, 3, 8, 5] = 2.0
+    observation[:, 0, 7, 7] = 0.9
+    observation[:, 1, 7, 7] = 0.8
+    observation[:, 2, 7, 7] = 0.1
+    observation[:, 3, 7, 7] = 1.5
+    goal = torch.tensor(
+        [[1.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+
+    features = extract_goal_target_features(observation, goal)
+
+    assert features[0].tolist() == pytest.approx((1 / 9, 7 / 9, 2.0, 1.0))
+    assert features[1].tolist() == pytest.approx((5 / 9, 5 / 9, 1.5, 1.0))
+
+
+def test_goal_target_feature_policy_requires_goal_conditioning() -> None:
+    with pytest.raises(ValueError, match="target-conditioned goal"):
+        BehaviorCloningPolicy(use_goal_target_features=True)
+
+
+def test_factorized_target_policy_selects_goal_specific_head() -> None:
+    policy = BehaviorCloningPolicy(
+        action_horizon=3,
+        goal_dim=4,
+        factorized_target_heads=True,
+    )
+    observation = torch.zeros((2, 4, 16, 16), dtype=torch.float32)
+    joint_position = torch.zeros((2, 6), dtype=torch.float32)
+    goals = torch.tensor(
+        [[1.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+
+    prediction = policy(observation, joint_position, goals)
+
+    assert prediction.shape == (2, 3, 6)
+    assert len(policy.action_head) == 2
+    with pytest.raises(ValueError, match="target-conditioned goal"):
+        BehaviorCloningPolicy(factorized_target_heads=True)
+
+
+def test_target_residual_policy_starts_from_shared_decoder() -> None:
+    torch.manual_seed(3)
+    shared = BehaviorCloningPolicy(action_horizon=3, goal_dim=4)
+    torch.manual_seed(3)
+    residual = BehaviorCloningPolicy(
+        action_horizon=3,
+        goal_dim=4,
+        target_residual_heads=True,
+    )
+    observation = torch.zeros((2, 4, 16, 16), dtype=torch.float32)
+    joint_position = torch.zeros((2, 6), dtype=torch.float32)
+    goals = torch.tensor(
+        [[1.0, 0.0, 1.0, 0.0], [1.0, 0.0, 0.0, 1.0]],
+        dtype=torch.float32,
+    )
+
+    torch.testing.assert_close(
+        residual(observation, joint_position, goals),
+        shared(observation, joint_position, goals),
+    )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        BehaviorCloningPolicy(
+            goal_dim=4,
+            factorized_target_heads=True,
+            target_residual_heads=True,
+        )
 
 
 def test_failure_replay_weights_target_requested_source_fraction(tmp_path) -> None:

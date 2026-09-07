@@ -44,6 +44,10 @@ class GoalAveragingPolicyRunner:
                 policy.model.history_horizon,
                 policy.model.use_object_features,
                 policy.model.use_goal_object_features,
+                policy.model.use_goal_target_features,
+                policy.model.factorized_target_heads,
+                policy.model.target_residual_heads,
+                policy.model.target_residual_scale,
             )
             for policy in self.policies
         }

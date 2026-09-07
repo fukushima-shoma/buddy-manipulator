@@ -74,6 +74,18 @@ def evaluate_checkpoint(
         use_goal_object_features=bool(
             config.get("use_goal_object_features", False)
         ),
+        use_goal_target_features=bool(
+            config.get("use_goal_target_features", False)
+        ),
+        factorized_target_heads=bool(
+            config.get("factorized_target_heads", False)
+        ),
+        target_residual_heads=bool(
+            config.get("target_residual_heads", False)
+        ),
+        target_residual_scale=float(
+            config.get("target_residual_scale", 0.25)
+        ),
         goal_dim=int(config.get("goal_dim", 0)),
         phase_dim=int(config.get("phase_dim", 0)),
         history_horizon=int(config.get("history_horizon", 1)),

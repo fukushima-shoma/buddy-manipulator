@@ -1,0 +1,78 @@
+{
+  "date": "2026-09-08",
+  "phase": "5E",
+  "objective": "test explicit target grounding and target-specialized decoders against the Phase 5D recurrent baseline",
+  "protocol": {
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "holdout_goal": ["purple", "yellow"],
+    "action_horizon": 8,
+    "history_horizon": 8,
+    "model_seed": 7,
+    "split_seed": 7,
+    "sampler_seed": 7
+  },
+  "visual_target_features": {
+    "checkpoint": "outputs/phase5/goal_bc/history8_object_target_seed7/bc_policy.pt",
+    "feature": "goal-selected target RGB-D mask centroid, depth, and area",
+    "segmentation_frames": 5440,
+    "empty_detections": 0,
+    "best_epoch": 48,
+    "validation_normalized_mse": 0.023054570568348066,
+    "validation_mean_action_mae": 0.02375907265163465,
+    "heldout_normalized_mse": 0.028217776032055126,
+    "heldout_mean_action_mae": 0.02537524400212729,
+    "balanced_rollout": {
+      "seed": 2621,
+      "successes": 3,
+      "trials": 40,
+      "per_goal": {
+        "red:green": [0, 10],
+        "red:yellow": [2, 10],
+        "purple:green": [0, 10],
+        "purple:yellow": [1, 10]
+      }
+    }
+  },
+  "factorized_target_heads": {
+    "checkpoint": "outputs/phase5/goal_bc/history8_object_factorized_seed7/bc_policy.pt",
+    "best_epoch": 49,
+    "validation_normalized_mse": 0.02534919011777912,
+    "validation_mean_action_mae": 0.025482739974726356,
+    "heldout_normalized_mse": 0.059628178179264066,
+    "heldout_mean_action_mae": 0.04696114175249914,
+    "green_rollout": {
+      "seed": 2722,
+      "red": [0, 10],
+      "purple": [1, 10]
+    },
+    "heldout_rollout": {"successes": 0, "trials": 10, "seed": 2823}
+  },
+  "target_residual_heads": {
+    "checkpoint": "outputs/phase5/goal_bc/history8_object_residual_seed7/bc_policy.pt",
+    "residual_scale": 0.25,
+    "best_epoch": 49,
+    "validation_normalized_mse": 0.020152209637065727,
+    "validation_mean_action_mae": 0.02263681377243141,
+    "heldout_normalized_mse": 0.02882074598296016,
+    "heldout_mean_action_mae": 0.026656917876029824,
+    "paired_balanced_rollout": {"successes": 0, "trials": 40, "seed": 2924}
+  },
+  "phase5d_ensemble_paired_reference": {
+    "balanced_rollout": {
+      "successes": 11,
+      "trials": 40,
+      "seed": 2924,
+      "per_goal": {
+        "red:green": [1, 10],
+        "red:yellow": [3, 10],
+        "purple:green": [0, 10],
+        "purple:yellow": [7, 10]
+      }
+    }
+  },
+  "finding": "target specialization improved some offline metrics but either added visual noise or damaged compositional sharing; the best offline model regressed from 11/40 to 0/40 on paired rollout",
+  "decision": "reject all Phase 5E variants; build hierarchical grasp and transport/place skills next"
+}

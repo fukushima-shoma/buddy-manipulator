@@ -242,4 +242,8 @@ Phase 5Dでは直近8個のjoint stateをGRUでencodeする。History policyはr
 3-model recurrent ensembleのbalanced benchmarkは12/40だったが、green targetは0/20だった。
 よってcheckpointはresearch baselineとして保持し、recommended policyには昇格していない。
 
+Phase 5Eではgoal-selected target pixels、target別decoder、shared decoder + target residualを比較した。
+Best offline modelでもpaired rolloutは旧ensembleの11/40に対して0/40となり、全variantをrejectした。
+次はmonolithic BCを拡張せず、grasp skillとtransport/place skillを分けるhierarchical policyを作る。
+
 詳細は[docs/phase5.md](docs/phase5.md)を参照。

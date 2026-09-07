@@ -175,3 +175,27 @@ improve offline action prediction and that object grounding improves bootstrap c
 target geometry remains unresolved. The next controlled experiment should provide an explicit
 observable target representation or a factorized target-conditioned decoder. Full results are in
 `docs/experiment_results/2026-09-07-phase5d-recurrent-history.json`.
+
+## Phase 5E: target-conditioning ablations
+
+Phase 5E tests three explanations for the green-target failures while preserving the Phase 5D data,
+GRU history, object bottleneck, and held-out split.
+
+1. `--use-goal-target-features` exposes the selected green or yellow mask centroid, depth, and area.
+   Segmentation was non-empty in all 5,440 recorded frames, but partial arm occlusion makes the
+   feature move during execution. Held-out MAE improved slightly to 0.02538 while balanced rollout
+   regressed to 3/40, with no green-target successes.
+2. `--factorized-target-heads` uses independent green and yellow action decoders. It produced the
+   first green success in this phase (1/20), but held-out MAE regressed to 0.04696 and held-out
+   rollout scored 0/10. Splitting the entire decoder removed the sharing needed to compose the
+   purple object with the yellow behavior learned only from red-to-yellow episodes.
+3. `--target-residual-heads` preserves a shared decoder and adds zero-initialized target-specific
+   residual heads at 25% scale. It achieved the best seed-7 validation MSE, 0.02015, but scored 0/40
+   in balanced rollout. The Phase 5D ensemble scored 11/40 on the identical seed-2924 scenes.
+
+All three variants are rejected. Better offline action prediction did not improve closed-loop task
+completion, and increasingly specialized target decoders damaged compositional sharing. The next
+build should stop treating the 13.4-second behavior as one monolithic action prediction problem:
+train or route a shared grasp-acquisition skill first, then invoke a target-conditioned
+transport-and-place skill after observable grasp confirmation. Full results are in
+`docs/experiment_results/2026-09-08-phase5e-target-conditioning.json`.

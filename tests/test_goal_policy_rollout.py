@@ -21,6 +21,10 @@ class FakeGoalPolicy:
                 "history_horizon": 8,
                 "use_object_features": False,
                 "use_goal_object_features": True,
+                "use_goal_target_features": True,
+                "factorized_target_heads": False,
+                "target_residual_heads": False,
+                "target_residual_scale": 0.25,
             },
         )()
         self.reset_seed = None

@@ -204,3 +204,24 @@ bottleneck. Phase 5E should test explicit visual target grounding or a factorize
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-phase5d-recurrent-history.json`.
+
+## Phase 5E target-conditioning decision
+
+Three controlled variants tested the Phase 5D green-target failure. Goal-selected target mask
+features improved held-out MAE slightly to 0.02538 but scored only 3/40 in balanced rollout, with
+zero green successes. Fully factorized green/yellow decoders produced 1/20 green successes but
+regressed held-out MAE to 0.04696 and scored 0/10 on the held-out composition. The split removed
+cross-target sharing needed by purple-to-yellow.
+
+A shared decoder with zero-initialized, 25%-scale target residual heads reached the best seed-7
+validation MSE, 0.02015, yet scored 0/40 closed loop. On the identical seed-2924 scenes, the existing
+Phase 5D recurrent ensemble scored 11/40. This is a direct rejection: lower offline error did not
+translate to interaction robustness.
+
+No Phase 5E checkpoint is promoted. The next experiment will use hierarchical skill composition:
+shared grasp acquisition with an observable transition condition, followed by target-conditioned
+transport and placement. This preserves object/target compositional sharing while shortening each
+learned horizon.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5e-target-conditioning.json`.

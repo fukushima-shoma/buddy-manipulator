@@ -512,6 +512,61 @@ def extract_goal_object_features(
     )
 
 
+def extract_goal_target_features(
+    observation: torch.Tensor,
+    goal: torch.Tensor,
+) -> torch.Tensor:
+    """Extract the image-space location of the target selected by the goal."""
+    if observation.ndim != 4 or observation.shape[1] != 4:
+        raise ValueError("observation must have shape (batch, 4, height, width)")
+    if goal.ndim != 2 or goal.shape[0] != observation.shape[0] or goal.shape[1] < 4:
+        raise ValueError("goal must select green or yellow for every observation")
+    red, green, blue, depth = observation.unbind(dim=1)
+    height, width = red.shape[-2:]
+    x_coordinates = torch.linspace(
+        -1.0, 1.0, width, dtype=observation.dtype, device=observation.device
+    ).reshape(1, 1, width)
+    y_coordinates = torch.linspace(
+        -1.0, 1.0, height, dtype=observation.dtype, device=observation.device
+    ).reshape(1, height, 1)
+    target_region = (x_coordinates > -0.2) & (y_coordinates > 0.35)
+    masks = (
+        (green > 0.35)
+        & (blue > 0.30)
+        & (green > red * 1.35)
+        & (blue > red * 1.20)
+        & (blue < green * 1.02)
+        & target_region,
+        (red > 0.45)
+        & (green > 0.40)
+        & (red > blue * 1.50)
+        & (green > blue * 1.50)
+        & (green > red * 0.80)
+        & (red > green * 0.70)
+        & target_region,
+    )
+    target_features = []
+    for raw_mask in masks:
+        mask = raw_mask.to(dtype=observation.dtype)
+        pixel_count = mask.sum(dim=(1, 2))
+        safe_pixel_count = pixel_count.clamp_min(1.0)
+        target_features.append(
+            torch.stack(
+                [
+                    (mask * x_coordinates).sum(dim=(1, 2)) / safe_pixel_count,
+                    (mask * y_coordinates).sum(dim=(1, 2)) / safe_pixel_count,
+                    (mask * depth).sum(dim=(1, 2)) / safe_pixel_count,
+                    pixel_count * (100.0 / float(height * width)),
+                ],
+                dim=1,
+            )
+        )
+    return (
+        target_features[0] * goal[:, 2:3]
+        + target_features[1] * goal[:, 3:4]
+    )
+
+
 class BehaviorCloningPolicy(nn.Module):
     """Small CNN policy for RGB-D and proprioceptive observations."""
 
@@ -523,6 +578,10 @@ class BehaviorCloningPolicy(nn.Module):
         action_horizon: int = 1,
         use_object_features: bool = False,
         use_goal_object_features: bool = False,
+        use_goal_target_features: bool = False,
+        factorized_target_heads: bool = False,
+        target_residual_heads: bool = False,
+        target_residual_scale: float = 0.25,
         goal_dim: int = 0,
         phase_dim: int = 0,
         history_horizon: int = 1,
@@ -533,9 +592,23 @@ class BehaviorCloningPolicy(nn.Module):
             raise ValueError("action, history, and hidden dimensions must be positive")
         if use_goal_object_features and goal_dim < 2:
             raise ValueError("goal object features require an object-conditioned goal")
+        if use_goal_target_features and goal_dim < 4:
+            raise ValueError("goal target features require a target-conditioned goal")
+        if factorized_target_heads and goal_dim < 4:
+            raise ValueError("factorized target heads require a target-conditioned goal")
+        if target_residual_heads and goal_dim < 4:
+            raise ValueError("target residual heads require a target-conditioned goal")
+        if factorized_target_heads and target_residual_heads:
+            raise ValueError("target decoder modes are mutually exclusive")
+        if target_residual_scale <= 0:
+            raise ValueError("target_residual_scale must be positive")
         self.action_horizon = action_horizon
         self.use_object_features = use_object_features
         self.use_goal_object_features = use_goal_object_features
+        self.use_goal_target_features = use_goal_target_features
+        self.factorized_target_heads = factorized_target_heads
+        self.target_residual_heads = target_residual_heads
+        self.target_residual_scale = target_residual_scale
         self.goal_dim = goal_dim
         self.phase_dim = phase_dim
         self.state_dim = state_dim
@@ -563,21 +636,48 @@ class BehaviorCloningPolicy(nn.Module):
         state_feature_dim = (
             history_hidden_dim if history_horizon > 1 else state_dim
         )
-        self.action_head = nn.Sequential(
-            nn.Linear(
-                64 * 2 * 2
-                + state_feature_dim
-                + (4 if use_object_features else 0)
-                + (4 if use_goal_object_features else 0)
-                + goal_dim
-                + phase_dim,
-                128,
-            ),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 6 * action_horizon),
+        action_input_dim = (
+            64 * 2 * 2
+            + state_feature_dim
+            + (4 if use_object_features else 0)
+            + (4 if use_goal_object_features else 0)
+            + (4 if use_goal_target_features else 0)
+            + goal_dim
+            + phase_dim
         )
+
+        def build_action_head() -> nn.Sequential:
+            return nn.Sequential(
+                nn.Linear(action_input_dim, 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, 6 * action_horizon),
+            )
+
+        self.action_head = (
+            nn.ModuleList([build_action_head(), build_action_head()])
+            if factorized_target_heads
+            else build_action_head()
+        )
+        self.target_residual_head = (
+            nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.Linear(action_input_dim, 64),
+                        nn.ReLU(),
+                        nn.Linear(64, 6 * action_horizon),
+                    )
+                    for _ in range(2)
+                ]
+            )
+            if target_residual_heads
+            else None
+        )
+        if self.target_residual_head is not None:
+            for head in self.target_residual_head:
+                nn.init.zeros_(head[-1].weight)
+                nn.init.zeros_(head[-1].bias)
 
     def forward(
         self,
@@ -613,6 +713,10 @@ class BehaviorCloningPolicy(nn.Module):
             if goal is None:
                 raise ValueError("goal object features require a goal")
             policy_features.append(extract_goal_object_features(observation, goal))
+        if self.use_goal_target_features:
+            if goal is None:
+                raise ValueError("goal target features require a goal")
+            policy_features.append(extract_goal_target_features(observation, goal))
         if self.goal_dim:
             if goal is None or goal.shape != (observation.shape[0], self.goal_dim):
                 raise ValueError(
@@ -629,9 +733,28 @@ class BehaviorCloningPolicy(nn.Module):
             policy_features.append(phase)
         elif phase is not None:
             raise ValueError("this policy checkpoint is not phase-conditioned")
-        action = self.action_head(
-            torch.cat(policy_features, dim=1)
-        )
+        features = torch.cat(policy_features, dim=1)
+        if self.factorized_target_heads:
+            assert goal is not None
+            head_actions = torch.stack(
+                [head(features) for head in self.action_head],
+                dim=1,
+            )
+            action = (
+                head_actions * goal[:, 2:4].unsqueeze(-1)
+            ).sum(dim=1)
+        else:
+            action = self.action_head(features)
+            if self.target_residual_head is not None:
+                assert goal is not None
+                residuals = torch.stack(
+                    [head(features) for head in self.target_residual_head],
+                    dim=1,
+                )
+                selected_residual = (
+                    residuals * goal[:, 2:4].unsqueeze(-1)
+                ).sum(dim=1)
+                action = action + self.target_residual_scale * selected_residual
         if self.action_horizon == 1:
             return action
         return action.reshape(action.shape[0], self.action_horizon, 6)
@@ -694,6 +817,18 @@ class BehaviorCloningRunner:
             use_object_features=bool(config.get("use_object_features", False)),
             use_goal_object_features=bool(
                 config.get("use_goal_object_features", False)
+            ),
+            use_goal_target_features=bool(
+                config.get("use_goal_target_features", False)
+            ),
+            factorized_target_heads=bool(
+                config.get("factorized_target_heads", False)
+            ),
+            target_residual_heads=bool(
+                config.get("target_residual_heads", False)
+            ),
+            target_residual_scale=float(
+                config.get("target_residual_scale", 0.25)
             ),
             goal_dim=int(config.get("goal_dim", 0)),
             phase_dim=int(config.get("phase_dim", 0)),

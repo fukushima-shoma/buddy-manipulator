@@ -80,6 +80,21 @@ def parse_args() -> argparse.Namespace:
         help="Append the RGB-D centroid of the object selected by the goal.",
     )
     parser.add_argument(
+        "--use-goal-target-features",
+        action="store_true",
+        help="Append the RGB-D centroid of the target selected by the goal.",
+    )
+    parser.add_argument(
+        "--factorized-target-heads",
+        action="store_true",
+        help="Use separate action decoders for green and yellow targets.",
+    )
+    parser.add_argument(
+        "--target-residual-heads",
+        action="store_true",
+        help="Add small target-specific residuals to a shared action decoder.",
+    )
+    parser.add_argument(
         "--initialize-from",
         type=Path,
         default=None,
@@ -363,6 +378,9 @@ def train(
     source_sampling: str = "replacement",
     use_object_features: bool = False,
     use_goal_object_features: bool = False,
+    use_goal_target_features: bool = False,
+    factorized_target_heads: bool = False,
+    target_residual_heads: bool = False,
     initialize_from: Path | None = None,
     preserve_checkpoint_split: bool = False,
     reuse_checkpoint_normalization: bool = False,
@@ -542,6 +560,9 @@ def train(
         action_horizon=action_horizon,
         use_object_features=use_object_features,
         use_goal_object_features=use_goal_object_features,
+        use_goal_target_features=use_goal_target_features,
+        factorized_target_heads=factorized_target_heads,
+        target_residual_heads=target_residual_heads,
         goal_dim=int(train_dataset.goal_dim or 0),
         phase_dim=train_dataset.phase_dim,
         history_horizon=history_horizon,
@@ -557,6 +578,12 @@ def train(
             == use_object_features
             and bool(initial_config.get("use_goal_object_features", False))
             == use_goal_object_features
+            and bool(initial_config.get("use_goal_target_features", False))
+            == use_goal_target_features
+            and bool(initial_config.get("factorized_target_heads", False))
+            == factorized_target_heads
+            and bool(initial_config.get("target_residual_heads", False))
+            == target_residual_heads
             and int(initial_config.get("goal_dim", 0))
             == int(train_dataset.goal_dim or 0)
             and int(initial_config.get("phase_dim", 0))
@@ -672,6 +699,10 @@ def train(
             "action_horizon": action_horizon,
             "use_object_features": use_object_features,
             "use_goal_object_features": use_goal_object_features,
+            "use_goal_target_features": use_goal_target_features,
+            "factorized_target_heads": factorized_target_heads,
+            "target_residual_heads": target_residual_heads,
+            "target_residual_scale": model.target_residual_scale,
             "goal_dim": int(train_dataset.goal_dim or 0),
             "phase_dim": train_dataset.phase_dim,
             "history_horizon": history_horizon,
@@ -707,6 +738,9 @@ def train(
         "action_horizon": action_horizon,
         "use_object_features": use_object_features,
         "use_goal_object_features": use_goal_object_features,
+        "use_goal_target_features": use_goal_target_features,
+        "factorized_target_heads": factorized_target_heads,
+        "target_residual_heads": target_residual_heads,
         "goal_dim": int(train_dataset.goal_dim or 0),
         "phase_conditioning": bool(train_dataset.phase_dim),
         "phase_dim": train_dataset.phase_dim,
@@ -760,6 +794,9 @@ def main() -> None:
         sampler_seed=args.sampler_seed,
         use_object_features=args.use_object_features,
         use_goal_object_features=args.use_goal_object_features,
+        use_goal_target_features=args.use_goal_target_features,
+        factorized_target_heads=args.factorized_target_heads,
+        target_residual_heads=args.target_residual_heads,
         initialize_from=args.initialize_from,
         preserve_checkpoint_split=args.preserve_checkpoint_split,
         reuse_checkpoint_normalization=args.reuse_checkpoint_normalization,
