@@ -106,8 +106,40 @@
         "success_rate_delta_points": 1.1
       },
       "decision": "not promoted; the one-success gain was not material or repeatable"
+    },
+    {
+      "id": "HYBRID-01",
+      "hypothesis": "A calibrated model-based fallback can cover the boundary region where the learned ensemble is unreliable.",
+      "gate": {
+        "observable_input": "calibrated RGB-D red-block position",
+        "workspace_x_bounds_m": [0.27, 0.33],
+        "workspace_y_bounds_m": [0.05, 0.11],
+        "edge_margin_m": 0.01,
+        "center_policy": "three-member object-centric BC ensemble",
+        "edge_policy": "vision-guided analytical IK grasp expert"
+      },
+      "development": {
+        "rollout_seed": 1506,
+        "current_successes": 21,
+        "candidate_successes": 30,
+        "trials": 30,
+        "learned_routes": 13,
+        "expert_routes": 17
+      },
+      "locked_validation": {
+        "rollout_seeds": [1901, 2002, 2103],
+        "current_successes": 66,
+        "candidate_successes": 86,
+        "trials": 90,
+        "recovered_failures": 20,
+        "regressed_successes": 0,
+        "learned_routes": 45,
+        "expert_routes": 45,
+        "success_rate_delta_points": 22.2
+      },
+      "decision": "promoted as recommended system policy; learned-model benchmark remains separate"
     }
   ],
-  "data_leakage_control": "Seeds 404, 505, 606, 1102, 1203, 1304, and 1405 are retired after their failures entered training. Seed 1506 was consumed for development screening. FT-01 validation used untouched seeds 1607, 1708, and 1809.",
-  "recommended_command": "./scripts/run_recommended_policy.sh --episodes 30 --seed 1901 --headless"
+  "data_leakage_control": "Seeds 404, 505, 606, 1102, 1203, 1304, and 1405 are retired after their failures entered training. Seeds 1506, 1607, 1708, and 1809 were consumed for development. HYBRID-01 settings were locked before validation on untouched seeds 1901, 2002, and 2103; those seeds are now retired from future promotion tests.",
+  "recommended_command": "./scripts/run_recommended_policy.sh --episodes 30 --seed 2204 --headless"
 }

@@ -27,6 +27,7 @@ enter training data.
 | ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | 65/90 versus baseline 57/90 on locked validation. | Provisionally promoted. |
 | DATA-04 | Expert corrections at ensemble boundary failures improve weak cells. | Add 36 successful corrections from seeds 1102-1405 and retrain from scratch. | 8/30 versus current ensemble 21/30 on seed 1506. | Rejected. |
 | FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Fine-tuned ensemble scored 20/30 versus current 21/30; a 50/50 old/new blend scored 65/90 versus current 64/90 on untouched validation. | Not promoted; gain was too small. |
+| HYBRID-01 | A calibrated model-based fallback can cover regions where learned behavior is unreliable. | Route the outer 1 cm workspace band to an RGB-D/IK expert and retain the learned ensemble in the center. | 86/90 versus current 66/90 on locked unseen placements; 20 recoveries and 0 regressions. | Promoted as recommended system policy. |
 
 ## DIFF-01 design decision
 
@@ -132,8 +133,31 @@ fine-tuned members reached 22/30 on seed 1506, so that lower-risk variant advanc
 
 The blend improved by one success (+1.1 points), which is not a repeatable or material gain under the
 promotion rule. FT-01 and the blend are therefore retained as research artifacts but not promoted.
-The current three-model object-centric ensemble remains the recommended policy. The next iteration
-should target the remaining boundary failure mechanism directly rather than tune this result further.
+At the end of FT-01, the three-model object-centric ensemble remained the recommended policy. The
+next experiment therefore targeted the remaining boundary failure mechanism directly.
+
+## HYBRID-01 promotion decision
+
+Across 270 consumed rollout placements, the ensemble succeeded on 111/118 placements (94%) inside
+the central rectangle but only 79/152 (52%) in the outer workspace band. HYBRID-01 freezes a 1 cm
+edge margin from that analysis. It localizes the block from calibrated RGB-D, routes edge placements
+to the existing analytical IK grasp expert, and leaves central placements with the learned ensemble.
+It never reads simulator object state. Development seed 1506 improved from 21/30 to 30/30 before
+the margin and implementation were locked.
+
+| Rollout seed | Learned ensemble | Gated hybrid | Recovered | Regressed |
+|---:|---:|---:|---:|---:|
+| 1901 | 20/30 | 29/30 | 9 | 0 |
+| 2002 | 20/30 | 29/30 | 9 | 0 |
+| 2103 | 26/30 | 28/30 | 2 | 0 |
+| **Total** | **66/90 (73.3%)** | **86/90 (95.6%)** | **20** | **0** |
+
+Exactly 45 validation episodes used the learned route and 45 used the expert route. All four hybrid
+failures occurred on the learned center route; the expert edge route had no failures. The +22.2-point
+gain is material and repeatable across all three prespecified unseen seeds, so HYBRID-01 becomes the
+recommended system policy. This does not claim that the neural model itself reached 95.6%: the result
+belongs to the combined learned/model-based controller. Physical deployment will require camera
+intrinsic and extrinsic calibration before the fixed simulation calibration can be replaced.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-model-improvement.json`.

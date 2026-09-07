@@ -15,6 +15,10 @@ import torch
 
 from buddy_manipulator.behavior_cloning import BehaviorCloningRunner
 from buddy_manipulator.collect_demos import sample_block_position, set_block_position
+from buddy_manipulator.hybrid_policy import (
+    ScriptedVisionGraspPolicyRunner,
+    SpatialGatedPolicyRunner,
+)
 from buddy_manipulator.kinematics import JointAngles
 from buddy_manipulator.policy_rollout import run_closed_loop_policy
 from buddy_manipulator.sim_camera import RgbdCamera
@@ -144,6 +148,15 @@ def parse_args() -> argparse.Namespace:
         help="Override the BC-to-residual correction blend for residual diffusion.",
     )
     parser.add_argument(
+        "--vision-expert-edge-margin",
+        type=float,
+        default=None,
+        help=(
+            "Route the outer workspace band of this width in meters to the "
+            "calibrated RGB-D/IK grasp expert."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("outputs/phase4/rollout_results.json"),
@@ -221,6 +234,11 @@ def main() -> None:
         or args.execute_chunk_steps < 0
     ):
         raise ValueError("episodes and image dimensions must be positive")
+    if (
+        args.vision_expert_edge_margin is not None
+        and args.vision_expert_edge_margin <= 0
+    ):
+        raise ValueError("vision expert edge margin must be positive")
     policy = load_policy_runner(
         args.checkpoint,
         device_name=args.device,
@@ -250,6 +268,14 @@ def main() -> None:
                 ),
             ]
         )
+    if args.vision_expert_edge_margin is not None:
+        policy = SpatialGatedPolicyRunner(
+            primary=policy,
+            specialist=ScriptedVisionGraspPolicyRunner(
+                action_horizon=policy.action_horizon
+            ),
+            edge_margin=args.vision_expert_edge_margin,
+        )
     rng = random.Random(args.seed)
     episode_results = []
     print(f"policy device: {policy.device}", flush=True)
@@ -263,6 +289,10 @@ def main() -> None:
             "block_position_m": list(block_position),
             **result.to_dict(),
         }
+        if getattr(policy, "last_route", None) is not None:
+            record["policy_route"] = policy.last_route
+            if policy.detected_position is not None:
+                record["detected_position_m"] = list(policy.detected_position)
         episode_results.append(record)
         print(
             f"episode {episode_index:03d}: success={str(result.success).lower()} "
@@ -280,6 +310,7 @@ def main() -> None:
         "diffusion_inference_steps": getattr(policy, "inference_steps", None),
         "diffusion_noise_scale": getattr(policy, "initial_noise_scale", None),
         "residual_blend": getattr(policy, "residual_blend", None),
+        "vision_expert_edge_margin_m": args.vision_expert_edge_margin,
         "seed": args.seed,
         "episode_count": args.episodes,
         "action_horizon": policy.action_horizon,
@@ -293,6 +324,13 @@ def main() -> None:
         "mean_max_lift_delta_m": float(
             np.mean([result["max_lift_delta"] for result in episode_results])
         ),
+        "route_counts": {
+            route: sum(
+                result.get("policy_route") == route for result in episode_results
+            )
+            for route in ("learned_ensemble", "vision_expert")
+            if any("policy_route" in result for result in episode_results)
+        },
         "episodes": episode_results,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

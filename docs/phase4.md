@@ -329,18 +329,20 @@ success判定はBC baselineと同一である。設計判断とpromotion decisio
 
 ## Current recommended policy
 
-The current recommendation is a three-member object-centric BC ensemble. Each model uses the same
-episode split and replay sampler and differs only in initialization seed 7, 17, or 27. In addition to
-CNN features, it receives a red-object image centroid, masked normalized depth, and mask area derived
-from RGB-D pixels. No simulator object state is used.
+The current recommendation is a vision-gated hybrid around the three-member object-centric BC
+ensemble. Each learned member uses the same episode split and replay sampler and differs only in
+initialization seed 7, 17, or 27. The central workspace remains under learned control. Placements in
+the outer 1 cm band are localized from calibrated RGB-D and routed to the analytical IK grasp expert.
+No simulator object state is used.
 
 ```bash
 ./scripts/run_recommended_policy.sh \
-  --episodes 30 --seed 1405 --headless \
-  --output outputs/phase4/recommended_seed1405.json
+  --episodes 30 --seed 2204 --headless \
+  --output outputs/phase4/recommended_seed2204.json
 ```
 
-On the locked unseen seeds 1102, 1203, and 1304, this ensemble reached 65/90 (72.2%) versus the
-previous baseline's 57/90 (63.3%). It recovered 19 failed placements and regressed 11 successes.
-The +8.9-point gain is sufficient for a provisional engineering promotion, but future confirmation
-must use new rollout seeds.
+On locked unseen seeds 1901, 2002, and 2103, the hybrid reached 86/90 (95.6%) versus the learned
+ensemble's 66/90 (73.3%). It recovered 20 failed placements and regressed none. Half of the trials
+used each route. This is a system-level reliability result, not a claim that the neural model alone
+reached 95.6%. Real hardware requires replacing the simulation camera constants with measured
+intrinsics and extrinsics. Future confirmation must use new rollout seeds.

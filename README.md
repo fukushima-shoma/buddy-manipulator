@@ -179,11 +179,13 @@ recommended settingではない。
 モデル変更の仮説・評価結果・採否は`docs/experiments.md`へ記録する。Offline lossだけでは昇格させず、
 同じblock配置でのpaired closed-loop successを主指標にする。
 
-現在のrecommended policyは、object-centric featureを使う3-model ensembleである。未使用だった
-3 rollout seedsの合計で、旧baselineの57/90（63.3%）から65/90（72.2%）へ改善した。
+現在のrecommended policyは、object-centric 3-model ensembleとvision-guided IK expertを組み
+合わせたgated hybridである。中央はlearned ensemble、外周1 cmはRGB-Dで位置推定してexpertへ
+routeする。未使用だった3 rollout seedsの合計で、ensemble単体の66/90（73.3%）から
+86/90（95.6%）へ改善し、20失敗を回復して既存成功の退行はなかった。
 
 ```bash
-./scripts/run_recommended_policy.sh --episodes 30 --seed 1405 --headless
+./scripts/run_recommended_policy.sh --episodes 30 --seed 2204 --headless
 ```
 
 モデル構造、正規化、評価指標の詳細は
