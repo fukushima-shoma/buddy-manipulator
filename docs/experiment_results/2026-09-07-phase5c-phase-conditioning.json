@@ -1,0 +1,70 @@
+{
+  "date": "2026-09-07",
+  "phase": "5C",
+  "objective": "test whether semantic task phase resolves temporal ambiguity in long-horizon goal-conditioned behavior cloning",
+  "protocol": {
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "holdout_goal": ["purple", "yellow"],
+    "action_horizon": 8,
+    "epochs": 50,
+    "split_seed": 7,
+    "model_seed": 7,
+    "sampler_seed": 7,
+    "holdout_used_for_selection": false
+  },
+  "phase_encoding": {
+    "type": "one_hot",
+    "dimension": 10,
+    "source": "episode-relative timestamp during training and elapsed control time during rollout",
+    "phases": [
+      "approach",
+      "descend",
+      "close",
+      "lift",
+      "retract",
+      "rotate",
+      "extend",
+      "lower",
+      "open",
+      "retreat"
+    ]
+  },
+  "reference_phase5b": {
+    "validation_mean_action_mae": 0.04464803710869008,
+    "heldout_mean_action_mae": 0.05180408566283957,
+    "seen_rollout": {"successes": 2, "trials": 10, "seed": 1308},
+    "heldout_rollout": {"successes": 0, "trials": 10, "seed": 1409}
+  },
+  "phase_only": {
+    "checkpoint": "outputs/phase5/goal_bc/phase_seed7/bc_policy.pt",
+    "best_epoch": 50,
+    "validation_normalized_mse": 0.09046086532617706,
+    "validation_mean_action_mae": 0.040003719867444505,
+    "heldout_normalized_mse": 0.11672206123669943,
+    "heldout_mean_action_mae": 0.047557331244552546,
+    "seen_rollout": {"successes": 1, "trials": 10, "seed": 1510},
+    "heldout_rollout": {"successes": 1, "trials": 10, "seed": 1611}
+  },
+  "receding_horizon_diagnostic": {
+    "checkpoint": "outputs/phase5/goal_bc/phase_seed7/bc_policy.pt",
+    "execute_chunk_steps": 1,
+    "heldout_rollout": {"successes": 0, "trials": 10, "seed": 1611},
+    "finding": "replanning every control step regressed on identical scenes, so eight-step execution was not the primary bottleneck"
+  },
+  "goal_object_feature_ablation": {
+    "checkpoint": "outputs/phase5/goal_bc/phase_object_seed7/bc_policy.pt",
+    "feature": "goal-selected red or purple RGB-D centroid, depth, and mask area",
+    "best_epoch": 50,
+    "validation_normalized_mse": 0.08958100201257693,
+    "validation_mean_action_mae": 0.04011578616888561,
+    "heldout_normalized_mse": 0.11659167473222695,
+    "heldout_mean_action_mae": 0.04828981406297352,
+    "seen_rollout": {"successes": 2, "trials": 10, "seed": 1712},
+    "heldout_rollout": {"successes": 1, "trials": 10, "seed": 1813}
+  },
+  "finding": "phase conditioning improved offline generalization and produced the first non-zero held-out rollout, but neither tested model was robust",
+  "decision": "retain phase conditioning as a partial positive baseline; do not promote either checkpoint; test learned recurrent history next"
+}

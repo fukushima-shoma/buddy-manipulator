@@ -62,6 +62,7 @@ def evaluate_checkpoint(
         load_episodes(paths),
         normalization,
         action_horizon=int(config.get("action_horizon", 1)),
+        phase_conditioning=int(config.get("phase_dim", 0)) > 0,
     )
     loader = DataLoader(dataset, batch_size=batch_size)
     model = BehaviorCloningPolicy(
@@ -69,7 +70,11 @@ def evaluate_checkpoint(
         state_dim=int(config["state_dim"]),
         action_horizon=int(config.get("action_horizon", 1)),
         use_object_features=bool(config.get("use_object_features", False)),
+        use_goal_object_features=bool(
+            config.get("use_goal_object_features", False)
+        ),
         goal_dim=int(config.get("goal_dim", 0)),
+        phase_dim=int(config.get("phase_dim", 0)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     metrics = evaluate_policy(model, loader, normalization, device)

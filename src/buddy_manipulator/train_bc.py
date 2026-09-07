@@ -75,6 +75,11 @@ def parse_args() -> argparse.Namespace:
         help="Append a differentiable red-object RGB-D bottleneck to CNN features.",
     )
     parser.add_argument(
+        "--use-goal-object-features",
+        action="store_true",
+        help="Append the RGB-D centroid of the object selected by the goal.",
+    )
+    parser.add_argument(
         "--initialize-from",
         type=Path,
         default=None,
@@ -121,6 +126,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="OBJECT:TARGET",
         help="Reserve one goal combination as a test-only compositional split.",
+    )
+    parser.add_argument(
+        "--phase-conditioning",
+        action="store_true",
+        help="Append the scripted task's semantic phase as a one-hot input.",
     )
     return parser.parse_args()
 
@@ -299,10 +309,12 @@ def evaluate_policy(
             joint_position = batch["joint_position"].to(device)
             target = batch["action"].to(device)
             goal = batch.get("goal")
+            phase = batch.get("phase")
             prediction = model(
                 observation,
                 joint_position,
                 goal.to(device) if goal is not None else None,
+                phase.to(device) if phase is not None else None,
             )
             squared_error_sum += float(torch.square(prediction - target).sum().cpu())
             predicted_action = denormalize_action(prediction, normalization)
@@ -344,11 +356,13 @@ def train(
     spatial_bins: int = 3,
     source_sampling: str = "replacement",
     use_object_features: bool = False,
+    use_goal_object_features: bool = False,
     initialize_from: Path | None = None,
     preserve_checkpoint_split: bool = False,
     reuse_checkpoint_normalization: bool = False,
     freeze_image_encoder: bool = False,
     holdout_goal: tuple[str, str] | None = None,
+    phase_conditioning: bool = False,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -421,17 +435,20 @@ def train(
         train_episodes,
         normalization,
         action_horizon=action_horizon,
+        phase_conditioning=phase_conditioning,
     )
     validation_dataset = BehaviorCloningDataset(
         validation_episodes,
         normalization,
         action_horizon=action_horizon,
+        phase_conditioning=phase_conditioning,
     )
     test_dataset = (
         BehaviorCloningDataset(
             test_episodes,
             normalization,
             action_horizon=action_horizon,
+            phase_conditioning=phase_conditioning,
         )
         if test_episodes
         else None
@@ -513,7 +530,9 @@ def train(
     model = BehaviorCloningPolicy(
         action_horizon=action_horizon,
         use_object_features=use_object_features,
+        use_goal_object_features=use_goal_object_features,
         goal_dim=int(train_dataset.goal_dim or 0),
+        phase_dim=train_dataset.phase_dim,
     ).to(device)
     if initialization_checkpoint is not None:
         initial_config = initialization_checkpoint["model_config"]
@@ -524,8 +543,12 @@ def train(
             and int(initial_config.get("action_horizon", 1)) == action_horizon
             and bool(initial_config.get("use_object_features", False))
             == use_object_features
+            and bool(initial_config.get("use_goal_object_features", False))
+            == use_goal_object_features
             and int(initial_config.get("goal_dim", 0))
             == int(train_dataset.goal_dim or 0)
+            and int(initial_config.get("phase_dim", 0))
+            == train_dataset.phase_dim
         )
         if not compatible:
             raise ValueError("initialization checkpoint model config is incompatible")
@@ -585,10 +608,12 @@ def train(
             target = batch["action"].to(device)
             optimizer.zero_grad(set_to_none=True)
             goal = batch.get("goal")
+            phase = batch.get("phase")
             prediction = model(
                 observation,
                 joint_position,
                 goal.to(device) if goal is not None else None,
+                phase.to(device) if phase is not None else None,
             )
             loss = loss_function(prediction, target)
             loss.backward()
@@ -632,7 +657,9 @@ def train(
             "action_dim": 6,
             "action_horizon": action_horizon,
             "use_object_features": use_object_features,
+            "use_goal_object_features": use_goal_object_features,
             "goal_dim": int(train_dataset.goal_dim or 0),
+            "phase_dim": train_dataset.phase_dim,
         },
         "normalization": normalization.to_dict(),
         "train_episodes": [path.name for path in train_paths],
@@ -663,7 +690,10 @@ def train(
         "epochs": epochs,
         "action_horizon": action_horizon,
         "use_object_features": use_object_features,
+        "use_goal_object_features": use_goal_object_features,
         "goal_dim": int(train_dataset.goal_dim or 0),
+        "phase_conditioning": bool(train_dataset.phase_dim),
+        "phase_dim": train_dataset.phase_dim,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
         "split_strategy": split_strategy,
@@ -712,11 +742,13 @@ def main() -> None:
         model_seed=args.model_seed,
         sampler_seed=args.sampler_seed,
         use_object_features=args.use_object_features,
+        use_goal_object_features=args.use_goal_object_features,
         initialize_from=args.initialize_from,
         preserve_checkpoint_split=args.preserve_checkpoint_split,
         reuse_checkpoint_normalization=args.reuse_checkpoint_normalization,
         freeze_image_encoder=args.freeze_image_encoder,
         holdout_goal=parse_goal_pair(args.holdout_goal),
+        phase_conditioning=args.phase_conditioning,
     )
 
 

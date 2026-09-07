@@ -11,6 +11,12 @@ import numpy as np
 from buddy_manipulator.goal_task import ManipulationGoal, evaluate_goal_task
 from buddy_manipulator.policy_rollout import controlled_joint_positions, rate_limit_action
 from buddy_manipulator.simulation import _mujoco
+from buddy_manipulator.task_phase import (
+    GOAL_PHASE_DIM,
+    GOAL_PHASE_NAMES,
+    encode_goal_phase,
+    goal_phase_index,
+)
 
 
 @dataclass(frozen=True)
@@ -58,11 +64,20 @@ def run_closed_loop_goal_policy(
     while completed_steps < maximum_steps:
         frame = camera.capture(data)
         joint_position = controlled_joint_positions(model, data)
+        phase = None
+        phase_index = None
+        if getattr(policy.model, "phase_dim", 0):
+            if policy.model.phase_dim != GOAL_PHASE_DIM:
+                raise ValueError("checkpoint uses an unsupported task phase dimension")
+            elapsed_seconds = completed_steps / control_hz
+            phase = encode_goal_phase(elapsed_seconds)
+            phase_index = goal_phase_index(elapsed_seconds)
         actions = policy.predict_chunk(
             frame.rgb,
             frame.depth,
             joint_position,
             goal.vector(),
+            phase,
         )
         if actions.ndim != 2 or actions.shape[1] != 6:
             raise ValueError("policy action chunk must have shape (horizon, 6)")
@@ -89,6 +104,11 @@ def run_closed_loop_goal_policy(
                         task_result.selected_object_in_target
                     ),
                     "distractor_in_target": task_result.distractor_in_target,
+                    "phase": (
+                        GOAL_PHASE_NAMES[phase_index]
+                        if phase_index is not None
+                        else None
+                    ),
                 }
             )
             if task_result.success:

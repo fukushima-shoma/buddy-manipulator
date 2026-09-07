@@ -161,3 +161,25 @@ intrinsic and extrinsic calibration before the fixed simulation calibration can 
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-model-improvement.json`.
+
+## Phase 5C temporal-conditioning decision
+
+The Phase 5B goal-conditioned model reduced held-out action MAE when its dataset grew from 20 to 78
+successful episodes, but held-out task success remained 0/10. Phase 5C therefore kept the same data,
+split seed, held-out purple-to-yellow combination, and eight-action horizon while adding only a
+ten-way semantic phase signal derived from episode-relative time.
+
+The phase-only model reduced validation MAE from 0.04465 to 0.04000 and held-out MAE from 0.05180
+to 0.04756. Fresh rollouts scored 1/10 on red-to-green and 1/10 on the held-out purple-to-yellow
+task. This is the first non-zero held-out composition, but it is not robust enough for promotion.
+Executing one action per replan regressed to 0/10 on the same held-out scenes, ruling out full-chunk
+execution as the primary failure.
+
+A prespecified follow-up exposed the goal-selected red or purple RGB-D centroid, depth, and area to
+the action head. It scored 2/10 on a fresh seen set and 1/10 on a fresh held-out set, while held-out
+MAE worsened slightly to 0.04829. The bottleneck remains available as an ablation but is rejected as
+the next baseline. The next experiment will replace the externally scheduled phase with learned
+recurrent history and preserve the held-out protocol.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-07-phase5c-phase-conditioning.json`.

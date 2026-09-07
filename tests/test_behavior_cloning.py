@@ -14,10 +14,12 @@ from buddy_manipulator.behavior_cloning import (
     compute_normalization,
     discover_episodes,
     extract_red_object_features,
+    extract_goal_object_features,
     load_episodes,
     split_episodes,
     split_episodes_spatially,
 )
+from buddy_manipulator.task_phase import GOAL_PHASE_DIM, encode_goal_phase
 from buddy_manipulator.dataset import save_episode
 from buddy_manipulator.diffusion_policy import (
     DiffusionPolicy,
@@ -222,6 +224,36 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
             sample["joint_position"].unsqueeze(0),
         )
 
+    phase_dataset = BehaviorCloningDataset(
+        episode_data,
+        normalization,
+        action_horizon=3,
+        phase_conditioning=True,
+    )
+    assert phase_dataset[0]["phase"].shape == (GOAL_PHASE_DIM,)
+    phase_policy = BehaviorCloningPolicy(
+        action_horizon=3,
+        phase_dim=GOAL_PHASE_DIM,
+    )
+    phase_prediction = phase_policy(
+        sample["observation"].unsqueeze(0),
+        sample["joint_position"].unsqueeze(0),
+        phase=phase_dataset[0]["phase"].unsqueeze(0),
+    )
+    assert phase_prediction.shape == (1, 3, 6)
+    with pytest.raises(ValueError, match="phase must have shape"):
+        phase_policy(
+            sample["observation"].unsqueeze(0),
+            sample["joint_position"].unsqueeze(0),
+        )
+
+
+def test_goal_phase_encoding_follows_expert_boundaries() -> None:
+    assert encode_goal_phase(0.0).argmax() == 0
+    assert encode_goal_phase(1.19).argmax() == 0
+    assert encode_goal_phase(1.2).argmax() == 1
+    assert encode_goal_phase(13.4).argmax() == GOAL_PHASE_DIM - 1
+
 
 def test_red_object_features_preserve_image_location_and_depth() -> None:
     observation = torch.zeros((1, 4, 5, 5), dtype=torch.float32)
@@ -235,6 +267,29 @@ def test_red_object_features_preserve_image_location_and_depth() -> None:
     assert extract_red_object_features(torch.zeros_like(observation))[0].tolist() == (
         pytest.approx((0.0, 0.0, 0.0, 0.0))
     )
+
+
+def test_goal_object_features_select_requested_color() -> None:
+    observation = torch.zeros((2, 4, 5, 5), dtype=torch.float32)
+    observation[:, 0, 1, 3] = 1.0
+    observation[:, 3, 1, 3] = 2.5
+    observation[:, 0, 3, 1] = 0.8
+    observation[:, 2, 3, 1] = 1.0
+    observation[:, 3, 3, 1] = 1.5
+    goal = torch.tensor(
+        [[1.0, 0.0, 1.0, 0.0], [0.0, 1.0, 1.0, 0.0]],
+        dtype=torch.float32,
+    )
+
+    features = extract_goal_object_features(observation, goal)
+
+    assert features[0].tolist() == pytest.approx((0.5, -0.5, 2.5, 4.0))
+    assert features[1].tolist() == pytest.approx((-0.5, 0.5, 1.5, 4.0))
+
+
+def test_goal_object_feature_policy_requires_goal_conditioning() -> None:
+    with pytest.raises(ValueError, match="object-conditioned goal"):
+        BehaviorCloningPolicy(use_goal_object_features=True)
 
 
 def test_failure_replay_weights_target_requested_source_fraction(tmp_path) -> None:
@@ -415,6 +470,35 @@ def test_goal_training_keeps_combination_test_only(tmp_path) -> None:
         device_name="cpu",
     )
     assert metrics["samples"] == 8
+
+
+def test_phase_conditioned_training_writes_reusable_checkpoint(tmp_path) -> None:
+    for index in range(2):
+        write_episode(tmp_path, index, success=True, offset=index * 0.1)
+
+    checkpoint_path, report = train(
+        tmp_path,
+        tmp_path / "phase_output",
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.5,
+        seed=5,
+        device_name="cpu",
+        action_horizon=3,
+        phase_conditioning=True,
+    )
+
+    assert report["phase_conditioning"] is True
+    assert report["phase_dim"] == GOAL_PHASE_DIM
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    assert checkpoint["model_config"]["phase_dim"] == GOAL_PHASE_DIM
+    evaluate_checkpoint(
+        checkpoint_path,
+        tmp_path,
+        split="validation",
+        batch_size=2,
+        device_name="cpu",
+    )
 
 
 def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:

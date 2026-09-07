@@ -215,4 +215,18 @@ structured instructionとscripted RGB-D/IK expertを使う。Goal-conditioned BC
   --goal purple:yellow --episodes 10 --device mps
 ```
 
+長いtask内のapproach/grasp/transport/placeを明示するPhase 5C policyは、既存dataを書き換えず
+timestampからsemantic phaseを生成して学習する。
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 --holdout-goal purple:yellow \
+  --phase-conditioning --device mps \
+  --output-dir outputs/phase5/goal_bc/phase_seed7
+```
+
+このablationではheld-out offline MAEが0.05180から0.04756へ改善し、held-out rolloutで
+初のnon-zero success（1/10）を確認した。ただしrobust policyの基準には未達で、次は
+recurrent historyを比較する。
+
 詳細は[docs/phase5.md](docs/phase5.md)を参照。

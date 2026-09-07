@@ -25,8 +25,9 @@ MuJoCoで関節制御、順運動学、逆運動学、手先の軌道、衝突�
 VLMで「赤いブロック」「左の箱」などを解釈し、対象物と目標を操作ポリシーへ渡す。VLAは既存モデルの推論・微調整から試す。
 
 Phase 5Aでは、赤・紫のblockと緑・黄のtargetを使うstructured goal、RGB-D/IK
-pick-and-place expert、4次元goal付きdataset、task-level evaluatorまで実装済み。次は
-goal-conditioned action-chunk policyとheld-out object-target combination評価を行う。
+pick-and-place expert、4次元goal付きdataset、task-level evaluatorまで実装済み。
+Phase 5B/5Cではgoal-conditioned action chunks、held-out object-target combination、semantic
+phase conditioningを評価した。次は同じsplitでrecurrent historyを比較する。
 
 ## Phase 6: 実機移行
 

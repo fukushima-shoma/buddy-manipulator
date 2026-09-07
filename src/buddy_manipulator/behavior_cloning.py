@@ -13,6 +13,8 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
+from buddy_manipulator.task_phase import GOAL_PHASE_DIM, encode_goal_phase
+
 
 @dataclass(frozen=True)
 class EpisodePath:
@@ -36,6 +38,7 @@ class EpisodeData:
     joint_position: np.ndarray
     action: np.ndarray
     goal: np.ndarray | None = None
+    timestamp: np.ndarray | None = None
 
     @property
     def sample_count(self) -> int:
@@ -234,6 +237,7 @@ def load_episodes(episode_paths: Sequence[EpisodePath]) -> list[EpisodeData]:
                         if "goal" in arrays.files
                         else None
                     ),
+                    timestamp=arrays["timestamp"].astype(np.float64, copy=True),
                 )
             )
     return episodes
@@ -276,12 +280,14 @@ class BehaviorCloningDataset(Dataset):
         normalization: NormalizationStats,
         *,
         action_horizon: int = 1,
+        phase_conditioning: bool = False,
     ) -> None:
         if action_horizon <= 0:
             raise ValueError("action_horizon must be positive")
         self.episodes = list(episodes)
         self.normalization = normalization
         self.action_horizon = action_horizon
+        self.phase_dim = GOAL_PHASE_DIM if phase_conditioning else 0
         goal_dimensions = {
             None if episode.goal is None else int(episode.goal.shape[1])
             for episode in self.episodes
@@ -338,6 +344,13 @@ class BehaviorCloningDataset(Dataset):
             sample["goal"] = torch.from_numpy(
                 episode.goal[frame_index].astype(np.float32)
             )
+        if self.phase_dim:
+            if episode.timestamp is None:
+                raise ValueError("phase conditioning requires episode timestamps")
+            elapsed_seconds = float(
+                episode.timestamp[frame_index] - episode.timestamp[0]
+            )
+            sample["phase"] = torch.from_numpy(encode_goal_phase(elapsed_seconds))
         return sample
 
 
@@ -438,6 +451,52 @@ def extract_red_object_features(observation: torch.Tensor) -> torch.Tensor:
     )
 
 
+def extract_goal_object_features(
+    observation: torch.Tensor,
+    goal: torch.Tensor,
+) -> torch.Tensor:
+    """Extract the image-space location of the object selected by the goal."""
+    if observation.ndim != 4 or observation.shape[1] != 4:
+        raise ValueError("observation must have shape (batch, 4, height, width)")
+    if goal.ndim != 2 or goal.shape[0] != observation.shape[0] or goal.shape[1] < 2:
+        raise ValueError("goal must select red or purple for every observation")
+    red, green, blue, depth = observation.unbind(dim=1)
+    masks = (
+        (red > 0.35) & (red > green * 1.35) & (red > blue * 1.35),
+        (red > 0.35)
+        & (blue > 0.35)
+        & (red > green * 1.35)
+        & (blue > green * 1.35),
+    )
+    height, width = red.shape[-2:]
+    x_coordinates = torch.linspace(
+        -1.0, 1.0, width, dtype=observation.dtype, device=observation.device
+    ).reshape(1, 1, width)
+    y_coordinates = torch.linspace(
+        -1.0, 1.0, height, dtype=observation.dtype, device=observation.device
+    ).reshape(1, height, 1)
+    color_features = []
+    for raw_mask in masks:
+        mask = raw_mask.to(dtype=observation.dtype)
+        pixel_count = mask.sum(dim=(1, 2))
+        safe_pixel_count = pixel_count.clamp_min(1.0)
+        color_features.append(
+            torch.stack(
+                [
+                    (mask * x_coordinates).sum(dim=(1, 2)) / safe_pixel_count,
+                    (mask * y_coordinates).sum(dim=(1, 2)) / safe_pixel_count,
+                    (mask * depth).sum(dim=(1, 2)) / safe_pixel_count,
+                    pixel_count * (100.0 / float(height * width)),
+                ],
+                dim=1,
+            )
+        )
+    return (
+        color_features[0] * goal[:, 0:1]
+        + color_features[1] * goal[:, 1:2]
+    )
+
+
 class BehaviorCloningPolicy(nn.Module):
     """Small CNN policy for RGB-D and proprioceptive observations."""
 
@@ -448,14 +507,20 @@ class BehaviorCloningPolicy(nn.Module):
         state_dim: int = 6,
         action_horizon: int = 1,
         use_object_features: bool = False,
+        use_goal_object_features: bool = False,
         goal_dim: int = 0,
+        phase_dim: int = 0,
     ) -> None:
         super().__init__()
         if action_horizon <= 0:
             raise ValueError("action_horizon must be positive")
+        if use_goal_object_features and goal_dim < 2:
+            raise ValueError("goal object features require an object-conditioned goal")
         self.action_horizon = action_horizon
         self.use_object_features = use_object_features
+        self.use_goal_object_features = use_goal_object_features
         self.goal_dim = goal_dim
+        self.phase_dim = phase_dim
         self.image_encoder = nn.Sequential(
             nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
@@ -471,7 +536,9 @@ class BehaviorCloningPolicy(nn.Module):
                 64 * 2 * 2
                 + state_dim
                 + (4 if use_object_features else 0)
-                + goal_dim,
+                + (4 if use_goal_object_features else 0)
+                + goal_dim
+                + phase_dim,
                 128,
             ),
             nn.ReLU(),
@@ -485,11 +552,16 @@ class BehaviorCloningPolicy(nn.Module):
         observation: torch.Tensor,
         joint_position: torch.Tensor,
         goal: torch.Tensor | None = None,
+        phase: torch.Tensor | None = None,
     ) -> torch.Tensor:
         image_features = self.image_encoder(observation)
         policy_features = [image_features, joint_position]
         if self.use_object_features:
             policy_features.append(extract_red_object_features(observation))
+        if self.use_goal_object_features:
+            if goal is None:
+                raise ValueError("goal object features require a goal")
+            policy_features.append(extract_goal_object_features(observation, goal))
         if self.goal_dim:
             if goal is None or goal.shape != (observation.shape[0], self.goal_dim):
                 raise ValueError(
@@ -498,6 +570,14 @@ class BehaviorCloningPolicy(nn.Module):
             policy_features.append(goal)
         elif goal is not None:
             raise ValueError("this policy checkpoint is not goal-conditioned")
+        if self.phase_dim:
+            if phase is None or phase.shape != (observation.shape[0], self.phase_dim):
+                raise ValueError(
+                    f"phase must have shape (batch, {self.phase_dim})"
+                )
+            policy_features.append(phase)
+        elif phase is not None:
+            raise ValueError("this policy checkpoint is not phase-conditioned")
         action = self.action_head(
             torch.cat(policy_features, dim=1)
         )
@@ -560,7 +640,11 @@ class BehaviorCloningRunner:
             state_dim=int(config["state_dim"]),
             action_horizon=int(config.get("action_horizon", 1)),
             use_object_features=bool(config.get("use_object_features", False)),
+            use_goal_object_features=bool(
+                config.get("use_goal_object_features", False)
+            ),
             goal_dim=int(config.get("goal_dim", 0)),
+            phase_dim=int(config.get("phase_dim", 0)),
         ).to(device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
@@ -590,6 +674,7 @@ class BehaviorCloningRunner:
         depth: np.ndarray,
         joint_position: np.ndarray,
         goal: np.ndarray | None = None,
+        phase: np.ndarray | None = None,
     ) -> np.ndarray:
         observation, normalized_joint = normalize_observation(
             rgb,
@@ -608,11 +693,17 @@ class BehaviorCloningRunner:
             if goal is not None
             else None
         )
+        phase_tensor = (
+            torch.from_numpy(phase.astype(np.float32)).unsqueeze(0).to(self.device)
+            if phase is not None
+            else None
+        )
         with torch.no_grad():
             normalized_action = self.model(
                 observation_tensor,
                 joint_tensor,
                 goal_tensor,
+                phase_tensor,
             )
             if normalized_action.ndim == 2:
                 normalized_action = normalized_action.unsqueeze(1)

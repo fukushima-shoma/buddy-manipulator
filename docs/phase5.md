@@ -1,4 +1,4 @@
-# Phase 5A: Goal-conditioned pick-and-place foundation
+# Phase 5: Goal-conditioned pick-and-place
 
 ## Goal
 
@@ -77,7 +77,7 @@ failures are excluded from BC training by the default success filter.
 The machine-readable foundation result is
 `docs/experiment_results/2026-09-07-phase5a-foundation.json`.
 
-## Next build
+## Phase 5B: goal-conditioned BC baseline
 
 The behavior-cloning pipeline now accepts optional four-value goals and can reserve one combination
 with `--holdout-goal OBJECT:TARGET`. The held-out episodes are never used for parameter updates or
@@ -104,3 +104,35 @@ The 13.6-second expert behavior contains approach, grasp, transport, place, and 
 the current policy receives no stage/history signal. A phase-conditioned or recurrent policy is the
 next controlled hypothesis. Promotion still requires correct-object and correct-target placement;
 action loss alone is insufficient.
+
+## Phase 5C: semantic phase conditioning
+
+Phase 5C tests the temporal-aliasing hypothesis without changing the demonstrations or held-out
+split. Each sample receives a ten-value one-hot phase derived from its episode-relative timestamp:
+approach, descend, close, lift, retract, rotate, extend, lower, open, or retreat. Closed-loop rollout
+generates the same signal from elapsed control time. Existing checkpoints remain compatible because
+phase conditioning defaults to disabled.
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 \
+  --holdout-goal purple:yellow --phase-conditioning --device mps \
+  --output-dir outputs/phase5/goal_bc/phase_seed7
+```
+
+The phase-only model reduced seen-goal validation MAE from 0.04465 to 0.04000 and held-out MAE from
+0.05180 to 0.04756. On fresh closed-loop scenes it scored 1/10 red-to-green and, importantly, the
+first non-zero held-out result: 1/10 purple-to-yellow. Executing only one action from each predicted
+chunk was tested on the same ten held-out scenes and regressed from 1/10 to 0/10, so open-loop chunk
+execution was not the primary failure cause.
+
+A second controlled model added a deterministic RGB-D centroid/depth/area bottleneck for whichever
+red or purple object the goal selected. It reached 2/10 on a fresh seen-goal set and 1/10 on a fresh
+held-out set, while held-out MAE regressed slightly to 0.04829. The extra feature is therefore kept
+as an ablation option (`--use-goal-object-features`) but is not promoted.
+
+Phase conditioning is a partial positive result, not a robust policy: failures still cluster at
+grasp acquisition and compound into transport errors. The next controlled experiment should add
+learned recurrent history, preserving the same held-out combination and comparing against both the
+Phase 5B and phase-only baselines. Full metrics and decisions are recorded in
+`docs/experiment_results/2026-09-07-phase5c-phase-conditioning.json`.
