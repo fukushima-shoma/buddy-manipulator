@@ -161,6 +161,9 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
         batch_size=2,
         validation_fraction=0.5,
         seed=3,
+        split_seed=11,
+        model_seed=13,
+        sampler_seed=17,
         device_name="cpu",
         action_horizon=3,
     )
@@ -185,6 +188,9 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
     checkpoint = torch.load(checkpoint_path, weights_only=False)
     assert checkpoint["successful_only"] is True
     assert checkpoint["seed"] == 3
+    assert checkpoint["split_seed"] == 11
+    assert checkpoint["model_seed"] == 13
+    assert checkpoint["sampler_seed"] == 17
     assert checkpoint["model_config"]["action_horizon"] == 3
 
     with np.load(dataset_dir / "episode_00000.npz") as arrays:

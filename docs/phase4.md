@@ -232,6 +232,43 @@ Balanced policyのtraining-seed平均は52.6%、sample standard deviationは10.0
 昇格せず、引き続き54-episodeの`outputs/phase4/chunked/bc_policy.pt`をbaselineとして保持する。
 Aggregateと各paired resultは`outputs/phase4/multiseed/summary.json`に保存される。
 
+### Training seed factor ablation
+
+従来の`--seed`はdataset split、model initialization、DataLoader/replay samplerの3要因を同時に
+変更していた。原因を分離するため、training CLIへ`--split-seed`、`--model-seed`、
+`--sampler-seed`を追加した。指定しなければ3つとも従来どおり`--seed`を使う。
+
+Multi-seed runnerでは`--vary-seed`で1要因だけを変更できる。例えばmodel initializationだけを
+比較する場合は次のように実行する。
+
+```bash
+./scripts/run_multiseed_benchmark.sh data/demonstrations \
+  --baseline outputs/phase4/chunked/bc_policy.pt \
+  --train-seeds 7,17,27 \
+  --vary-seed model --fixed-seed 7 \
+  --rollout-seeds 404,505,606 \
+  --episodes 30 --epochs 30 --action-horizon 8 \
+  --failure-replay-fraction 0.2 --device mps \
+  --output-dir outputs/phase4/seed_ablation/model
+```
+
+Splitとsamplerについても`--vary-seed split`または`--vary-seed sampler`で同じ実験を行った。
+Seed 7のrunとbaseline reportsは共通成果物を再利用し、各要因でseed 17・27だけを再学習した。
+
+| Varied factor | Seed results | Mean | Sample std | Range |
+|---|---|---:|---:|---:|
+| Model initialization | 53.3%, 53.3%, 65.6% | 57.4% | 7.1 points | 12.2 points |
+| Replay sampler | 53.3%, 34.4%, 27.8% | 38.5% | 13.3 points | 25.6 points |
+| Dataset split | 53.3%, 26.7%, 57.8% | 45.9% | 16.8 points | 31.1 points |
+
+この条件ではdataset splitが最大、replacement replay samplerが次に大きいvariance sourceだった。
+Model initializationにも無視できない影響がある。これはseed 7を基準とした3点のone-factor-at-a-time
+experimentであり、要因間interactionを含むformal variance decompositionではない。
+
+次のmodel improvementでは、object-position coverageを保つspatially stratified splitと、毎epochの
+source比率を保ちながらsample重複を抑えるdeterministic balanced samplerを優先する。各factorの
+結果は`outputs/phase4/seed_ablation/{model,sampler,split}/summary.json`に保存される。
+
 ## Current limitations
 
 - Dataset size is still small; the current goal is pipeline validation, not robust generalization.
@@ -239,3 +276,4 @@ Aggregateと各paired resultは`outputs/phase4/multiseed/summary.json`に保存�
 - Training images use one camera and one lighting configuration.
 - Failure conditions guide expert recollection, but policy-visited states are not yet relabeled as in full DAgger.
 - Source-balanced models vary by about 10 percentage points across the three tested training seeds.
+- Random episode splits and replacement replay sampling are the largest measured variance sources.

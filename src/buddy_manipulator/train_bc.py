@@ -37,6 +37,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
+        "--split-seed",
+        type=int,
+        default=None,
+        help="Dataset split seed; defaults to --seed.",
+    )
+    parser.add_argument(
+        "--model-seed",
+        type=int,
+        default=None,
+        help="Model initialization seed; defaults to --seed.",
+    )
+    parser.add_argument(
+        "--sampler-seed",
+        type=int,
+        default=None,
+        help="DataLoader and weighted-sampler seed; defaults to --seed.",
+    )
+    parser.add_argument(
         "--action-horizon",
         type=int,
         default=1,
@@ -132,6 +150,9 @@ def train(
     successful_only: bool = True,
     action_horizon: int = 1,
     failure_replay_fraction: float | None = None,
+    split_seed: int | None = None,
+    model_seed: int | None = None,
+    sampler_seed: int | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -140,13 +161,18 @@ def train(
         or action_horizon <= 0
     ):
         raise ValueError("epochs, batch_size, and learning_rate must be positive")
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
+    split_seed = seed if split_seed is None else split_seed
+    model_seed = seed if model_seed is None else model_seed
+    sampler_seed = seed if sampler_seed is None else sampler_seed
+    if min(seed, split_seed, model_seed, sampler_seed) < 0:
+        raise ValueError("training seeds must be non-negative")
+    random.seed(model_seed)
+    np.random.seed(model_seed)
+    torch.manual_seed(model_seed)
 
     paths = discover_episodes(dataset_dir, successful_only=successful_only)
     train_paths, validation_paths = split_episodes(
-        paths, validation_fraction=validation_fraction, seed=seed
+        paths, validation_fraction=validation_fraction, seed=split_seed
     )
     train_episodes = load_episodes(train_paths)
     validation_episodes = load_episodes(validation_paths)
@@ -161,7 +187,7 @@ def train(
         normalization,
         action_horizon=action_horizon,
     )
-    generator = torch.Generator().manual_seed(seed)
+    generator = torch.Generator().manual_seed(sampler_seed)
     if failure_replay_fraction is None:
         train_loader = DataLoader(
             train_dataset,
@@ -204,7 +230,8 @@ def train(
     print(
         f"training on {device}: {len(train_paths)} episodes/"
         f"{len(train_dataset)} samples; validation {len(validation_paths)} episodes/"
-        f"{len(validation_dataset)} samples; sampling={sampling_description}",
+        f"{len(validation_dataset)} samples; sampling={sampling_description}; "
+        f"seeds split/model/sampler={split_seed}/{model_seed}/{sampler_seed}",
         flush=True,
     )
     for epoch in range(1, epochs + 1):
@@ -259,6 +286,9 @@ def train(
         "successful_only": successful_only,
         "failure_replay_fraction": failure_replay_fraction,
         "seed": seed,
+        "split_seed": split_seed,
+        "model_seed": model_seed,
+        "sampler_seed": sampler_seed,
         "best_epoch": best_epoch,
         "validation_metrics": best_metrics,
     }
@@ -271,6 +301,9 @@ def train(
         "action_horizon": action_horizon,
         "failure_replay_fraction": failure_replay_fraction,
         "seed": seed,
+        "split_seed": split_seed,
+        "model_seed": model_seed,
+        "sampler_seed": sampler_seed,
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],
@@ -297,6 +330,9 @@ def main() -> None:
         successful_only=not args.include_failures,
         action_horizon=args.action_horizon,
         failure_replay_fraction=args.failure_replay_fraction,
+        split_seed=args.split_seed,
+        model_seed=args.model_seed,
+        sampler_seed=args.sampler_seed,
     )
 
 

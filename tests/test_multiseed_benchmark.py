@@ -4,6 +4,7 @@ import pytest
 
 from buddy_manipulator.multiseed_benchmark import (
     parse_seed_list,
+    resolve_factor_seeds,
     summarize_benchmark,
 )
 
@@ -28,6 +29,19 @@ def test_parse_seed_list() -> None:
     assert parse_seed_list("7, 17,27") == [7, 17, 27]
     with pytest.raises(argparse.ArgumentTypeError, match="unique"):
         parse_seed_list("7,7")
+
+
+@pytest.mark.parametrize(
+    ("factor", "expected"),
+    [
+        ("all", {"split_seed": 17, "model_seed": 17, "sampler_seed": 17}),
+        ("split", {"split_seed": 17, "model_seed": 7, "sampler_seed": 7}),
+        ("model", {"split_seed": 7, "model_seed": 17, "sampler_seed": 7}),
+        ("sampler", {"split_seed": 7, "model_seed": 7, "sampler_seed": 17}),
+    ],
+)
+def test_resolve_factor_seeds(factor, expected) -> None:
+    assert resolve_factor_seeds(17, vary_seed=factor, fixed_seed=7) == expected
 
 
 def test_summarize_benchmark_reports_training_seed_variability(tmp_path) -> None:

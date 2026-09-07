@@ -159,6 +159,7 @@ checkpointとtraining metricsは`outputs/phase4/`へ保存される。失敗epis
 失敗配置からexpert dataを再収集し、paired rolloutを比較するfailure-driven loopも利用できる。
 targeted dataが増えた場合は`--failure-replay-fraction 0.2`でsource-balanced samplingを行える。
 `./scripts/run_multiseed_benchmark.sh`は複数training/rollout seedをpaired評価し、modelの平均成功率と
-seed間のばらつきを`summary.json`へ保存する。
+seed間のばらつきを`summary.json`へ保存する。`--vary-seed split|model|sampler`を使うと、他の
+seed要因を固定したcontrolled ablationも実行できる。
 モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。

@@ -40,6 +40,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/phase4/multiseed"))
     parser.add_argument("--train-seeds", type=parse_seed_list, default=[7, 17, 27])
     parser.add_argument("--rollout-seeds", type=parse_seed_list, default=[404, 505, 606])
+    parser.add_argument(
+        "--vary-seed",
+        choices=("all", "split", "model", "sampler"),
+        default="all",
+        help="Training seed factor changed by --train-seeds.",
+    )
+    parser.add_argument(
+        "--fixed-seed",
+        type=int,
+        default=7,
+        help="Seed used for factors not selected by --vary-seed.",
+    )
+    parser.add_argument(
+        "--baseline-reports-dir",
+        type=Path,
+        default=None,
+        help="Optional shared directory for baseline rollout reports.",
+    )
+    parser.add_argument(
+        "--fixed-run-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Reuse this candidate directory when a varied seed equals "
+            "--fixed-seed; requires --reuse-existing."
+        ),
+    )
     parser.add_argument("--episodes", type=int, default=30)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch-size", type=int, default=32)
@@ -69,6 +96,25 @@ def _success_totals(reports: Mapping[int, dict[str, Any]]) -> tuple[int, int]:
     if trials == 0:
         raise ValueError("rollout reports must contain at least one episode")
     return successes, trials
+
+
+def resolve_factor_seeds(
+    varied_seed: int,
+    *,
+    vary_seed: str,
+    fixed_seed: int,
+) -> dict[str, int]:
+    if vary_seed not in {"all", "split", "model", "sampler"}:
+        raise ValueError(f"unknown seed factor: {vary_seed}")
+    seeds = {
+        "split_seed": fixed_seed,
+        "model_seed": fixed_seed,
+        "sampler_seed": fixed_seed,
+    }
+    if vary_seed == "all":
+        return {name: varied_seed for name in seeds}
+    seeds[f"{vary_seed}_seed"] = varied_seed
+    return seeds
 
 
 def summarize_benchmark(
@@ -211,10 +257,14 @@ def main() -> None:
     args = parse_args()
     if args.episodes <= 0 or args.epochs <= 0 or args.batch_size <= 0:
         raise ValueError("episodes, epochs, and batch size must be positive")
+    if args.fixed_seed < 0:
+        raise ValueError("fixed seed must be non-negative")
+    if args.fixed_run_dir is not None and not args.reuse_existing:
+        raise ValueError("--fixed-run-dir requires --reuse-existing")
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_reports = {}
-    baseline_dir = args.output_dir / "baseline"
+    baseline_dir = args.baseline_reports_dir or args.output_dir / "baseline"
     for rollout_seed in args.rollout_seeds:
         report_path = baseline_dir / f"rollout_seed_{rollout_seed}.json"
         _run_unless_present(
@@ -232,8 +282,18 @@ def main() -> None:
 
     candidate_checkpoints = {}
     candidate_reports = {}
+    candidate_seed_configs = {}
     for train_seed in args.train_seeds:
-        seed_dir = args.output_dir / f"train_seed_{train_seed}"
+        seed_config = resolve_factor_seeds(
+            train_seed,
+            vary_seed=args.vary_seed,
+            fixed_seed=args.fixed_seed,
+        )
+        candidate_seed_configs[train_seed] = seed_config
+        if train_seed == args.fixed_seed and args.fixed_run_dir is not None:
+            seed_dir = args.fixed_run_dir
+        else:
+            seed_dir = args.output_dir / f"train_seed_{train_seed}"
         checkpoint_path = seed_dir / "bc_policy.pt"
         training_command = [
             sys.executable,
@@ -251,7 +311,13 @@ def main() -> None:
             "--validation-fraction",
             str(args.validation_fraction),
             "--seed",
-            str(train_seed),
+            str(args.fixed_seed),
+            "--split-seed",
+            str(seed_config["split_seed"]),
+            "--model-seed",
+            str(seed_config["model_seed"]),
+            "--sampler-seed",
+            str(seed_config["sampler_seed"]),
             "--action-horizon",
             str(args.action_horizon),
             "--failure-replay-fraction",
@@ -288,9 +354,13 @@ def main() -> None:
         candidate_checkpoints,
         candidate_reports,
     )
+    for result in summary["training_seed_results"]:
+        result["seed_config"] = candidate_seed_configs[result["train_seed"]]
     summary["config"] = {
         "dataset_dir": str(args.dataset_dir),
         "train_seeds": args.train_seeds,
+        "vary_seed": args.vary_seed,
+        "fixed_seed": args.fixed_seed,
         "rollout_seeds": args.rollout_seeds,
         "episodes_per_rollout_seed": args.episodes,
         "epochs": args.epochs,
@@ -312,7 +382,7 @@ def main() -> None:
     )
     for result in summary["training_seed_results"]:
         print(
-            f"train seed {result['train_seed']}: "
+            f"{args.vary_seed} seed {result['train_seed']}: "
             f"{result['successes']}/{result['trials']} "
             f"({result['success_rate']:.1%}, "
             f"delta {result['success_rate_delta']:+.1%})",
