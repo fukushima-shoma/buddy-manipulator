@@ -52,6 +52,32 @@ def test_validator_detects_sample_count_mismatch(tmp_path) -> None:
     )
 
 
+def test_goal_conditioned_episode_passes_validation(tmp_path) -> None:
+    arrays = example_arrays()
+    arrays["goal"] = np.repeat(
+        np.asarray([[1.0, 0.0, 0.0, 1.0]], dtype=np.float32),
+        3,
+        axis=0,
+    )
+    data_path, metadata_path = save_episode(
+        tmp_path,
+        1,
+        arrays,
+        success=True,
+        block_start_position=(0.3, 0.08, 0.025),
+        source="goal_scripted",
+        task_goal={
+            "object_color": "red",
+            "target_color": "yellow",
+            "instruction": "place the red block in the yellow zone",
+        },
+    )
+
+    assert validate_episode(data_path, metadata_path) == []
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["task_goal"]["target_color"] == "yellow"
+
+
 def test_next_episode_index_does_not_overwrite_existing_data(tmp_path) -> None:
     (tmp_path / "episode_00002.npz").touch()
     (tmp_path / "episode_00007.npz").touch()

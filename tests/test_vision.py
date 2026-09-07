@@ -3,6 +3,7 @@ import pytest
 
 from buddy_manipulator.vision import (
     PixelDetection,
+    detect_colored_object,
     detect_red_object,
     locate_detection_in_world,
     project_pixels_to_world,
@@ -26,6 +27,34 @@ def test_detect_red_object_ignores_small_noise() -> None:
     rgb = np.zeros((20, 20, 3), dtype=np.uint8)
     rgb[3, 4] = (255, 0, 0)
     assert detect_red_object(rgb) is None
+
+
+def test_detect_blue_object_selects_requested_color() -> None:
+    rgb = np.zeros((80, 120, 3), dtype=np.uint8)
+    rgb[10:30, 15:35] = (220, 20, 10)
+    rgb[40:70, 70:100] = (10, 30, 230)
+
+    detection = detect_colored_object(rgb, color="blue")
+
+    assert detection is not None
+    assert detection.bbox == (70, 40, 99, 69)
+    assert detection.area == 900
+
+
+def test_color_detector_rejects_unknown_color() -> None:
+    with pytest.raises(ValueError, match="unsupported object color"):
+        detect_colored_object(np.zeros((10, 10, 3), dtype=np.uint8), color="green")
+
+
+def test_detect_purple_object_ignores_blue_pixels() -> None:
+    rgb = np.zeros((60, 80, 3), dtype=np.uint8)
+    rgb[5:25, 5:25] = (20, 40, 230)
+    rgb[30:50, 40:70] = (180, 20, 220)
+
+    detection = detect_colored_object(rgb, color="purple")
+
+    assert detection is not None
+    assert detection.bbox == (40, 30, 69, 49)
 
 
 def test_project_center_pixel_along_camera_view_axis() -> None:

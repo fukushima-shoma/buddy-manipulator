@@ -36,26 +36,40 @@ class WorldDetection:
         return self.x, self.y, self.z
 
 
-def detect_red_object(
+def detect_colored_object(
     rgb: np.ndarray,
     *,
-    min_red: int = 100,
+    color: str,
+    min_value: int = 100,
     dominance_ratio: float = 1.45,
     min_area: int = 20,
 ) -> PixelDetection | None:
-    """Detect a red object using a transparent, deterministic color rule."""
+    """Detect a red or blue object using a deterministic color rule."""
     if rgb.ndim != 3 or rgb.shape[2] != 3:
         raise ValueError("rgb must have shape (height, width, 3)")
+    channel_indices = {"red": 0, "blue": 2}
+    if color not in (*channel_indices, "purple"):
+        raise ValueError(f"unsupported object color: {color}")
 
     channels = rgb.astype(np.float32)
-    red = channels[:, :, 0]
-    green = channels[:, :, 1]
-    blue = channels[:, :, 2]
-    mask = (
-        (red >= min_red)
-        & (red >= dominance_ratio * green)
-        & (red >= dominance_ratio * blue)
-    )
+    if color == "purple":
+        red, green, blue = (channels[:, :, index] for index in range(3))
+        mask = (
+            (red >= min_value)
+            & (blue >= min_value)
+            & (red >= dominance_ratio * green)
+            & (blue >= dominance_ratio * green)
+        )
+    else:
+        selected = channels[:, :, channel_indices[color]]
+        other_indices = [
+            index for index in range(3) if index != channel_indices[color]
+        ]
+        mask = (
+            (selected >= min_value)
+            & (selected >= dominance_ratio * channels[:, :, other_indices[0]])
+            & (selected >= dominance_ratio * channels[:, :, other_indices[1]])
+        )
     rows, columns = np.nonzero(mask)
     if columns.size < min_area:
         return None
@@ -69,6 +83,23 @@ def detect_red_object(
         y_max=int(rows.max()),
         area=int(columns.size),
         mask=mask,
+    )
+
+
+def detect_red_object(
+    rgb: np.ndarray,
+    *,
+    min_red: int = 100,
+    dominance_ratio: float = 1.45,
+    min_area: int = 20,
+) -> PixelDetection | None:
+    """Backward-compatible red-object detector."""
+    return detect_colored_object(
+        rgb,
+        color="red",
+        min_value=min_red,
+        dominance_ratio=dominance_ratio,
+        min_area=min_area,
     )
 
 

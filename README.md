@@ -47,6 +47,7 @@ Buddyで培ったROS 2・カメラ認識・会話・安全停止の知識を、�
 全体計画は [docs/roadmap.md](docs/roadmap.md)、各フェーズの演習は
 [docs/phase1.md](docs/phase1.md)、[docs/phase2.md](docs/phase2.md)、
 [docs/phase3.md](docs/phase3.md)、[docs/phase4.md](docs/phase4.md) を参照。
+[docs/phase5.md](docs/phase5.md)にはgoal-conditioned pick-and-placeを記載している。
 
 ## Phase 1 クイックスタート
 
@@ -190,3 +191,17 @@ routeする。未使用だった3 rollout seedsの合計で、ensemble単体の6
 
 モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。
+
+## Phase 5A クイックスタート
+
+赤または紫のblockと、緑または黄色のtargetを指定してpick-and-placeを実行する。
+
+```bash
+./scripts/run_goal_demo.sh --object purple --target yellow
+./scripts/collect_goal_demos.sh --episodes 20 --seed 905
+./scripts/validate_dataset.sh data/goal_demonstrations
+```
+
+各frameにはRGB-D・joint state・actionに加えて4次元goal vectorが保存される。現段階では
+structured instructionとscripted RGB-D/IK expertを使い、次のbuildでgoal-conditioned policyを
+学習する。詳細は[docs/phase5.md](docs/phase5.md)を参照。

@@ -98,6 +98,8 @@ def save_episode(
     block_start_position: tuple[float, float, float],
     source: str = "scripted",
     termination: str = "completed",
+    task_goal: dict[str, str] | None = None,
+    scene_state: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = f"episode_{episode_index:05d}"
@@ -115,6 +117,10 @@ def save_episode(
         "controlled_joints": list(CONTROLLED_JOINTS),
         "block_start_position_m": list(block_start_position),
     }
+    if task_goal is not None:
+        metadata["task_goal"] = task_goal
+    if scene_state is not None:
+        metadata["scene_state"] = scene_state
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     return data_path, metadata_path
 
@@ -149,6 +155,15 @@ def validate_episode(data_path: Path, metadata_path: Path) -> list[str]:
             errors.append("joint_position must have six values per sample")
         if arrays["action"].shape[1:] != (6,):
             errors.append("action must have six values per sample")
+        if "goal" in arrays.files:
+            if arrays["goal"].shape != (sample_count, 4):
+                errors.append("goal must have four values per sample")
+            if arrays["goal"].dtype != np.float32:
+                errors.append("goal must use float32")
+            if not np.all(np.isfinite(arrays["goal"])):
+                errors.append("non-finite values: goal")
+            if not isinstance(metadata.get("task_goal"), dict):
+                errors.append("goal array requires task_goal metadata")
         for key in ("timestamp", "depth", "joint_position", "action"):
             if not np.all(np.isfinite(arrays[key])):
                 errors.append(f"non-finite values: {key}")

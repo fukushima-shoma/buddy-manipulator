@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-07",
+  "phase": "5A",
+  "objective": "build a goal-conditioned multi-object pick-and-place task and reliable demonstration expert",
+  "scene": {
+    "objects": ["red block", "purple block"],
+    "targets": ["green zone", "yellow zone"],
+    "goal_combinations": 4,
+    "object_x_bounds_m": [0.23, 0.34],
+    "object_y_bounds_m": [0.04, 0.13],
+    "minimum_object_separation_m": 0.11
+  },
+  "goal_encoding": {
+    "shape": [4],
+    "order": ["red object", "purple object", "green target", "yellow target"]
+  },
+  "expert": {
+    "object_localization": "requested-color segmentation plus calibrated RGB-D projection",
+    "planning": "analytical IK with retract-rotate-extend transport corridor",
+    "simulator_object_state_used_for_grasp": false,
+    "phase5_finger_pad_friction": 1.2
+  },
+  "development_findings": [
+    "slower direct transfer did not prevent long-radius object throws",
+    "a 0.20 m transport-radius corridor reduced lateral transfer load",
+    "grasping 0.012 m below the detected top surface stabilized transport",
+    "initial objects require 0.11 m separation for open-gripper clearance",
+    "object X below 0.23 m was outside the reliable close-in grasp envelope"
+  ],
+  "locked_benchmark": {
+    "seed": 905,
+    "episodes": 20,
+    "successes": 20,
+    "success_rate": 1.0,
+    "mean_placement_error_m": 0.012610867165056536,
+    "max_placement_error_m": 0.02423652297449933,
+    "episodes_per_goal_combination": 5
+  },
+  "dataset": {
+    "path": "data/goal_demonstrations",
+    "successful_episodes": 20,
+    "samples_per_episode": 68,
+    "schema_version": 1,
+    "optional_array": "goal",
+    "task_version": "phase5a-v1"
+  },
+  "decision": "foundation accepted; proceed to goal-conditioned policy training with held-out combination evaluation"
+}
