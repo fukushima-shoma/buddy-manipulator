@@ -326,3 +326,21 @@ success判定はBC baselineと同一である。設計判断とpromotion decisio
 - Source-balanced models vary by about 10 percentage points across the three tested training seeds.
 - Random episode splits and replacement replay sampling are the largest measured variance sources.
 - Naive spatial stratification and duplicate removal both reduced closed-loop performance in the seed-7 ablation.
+
+## Current recommended policy
+
+The current recommendation is a three-member object-centric BC ensemble. Each model uses the same
+episode split and replay sampler and differs only in initialization seed 7, 17, or 27. In addition to
+CNN features, it receives a red-object image centroid, masked normalized depth, and mask area derived
+from RGB-D pixels. No simulator object state is used.
+
+```bash
+./scripts/run_recommended_policy.sh \
+  --episodes 30 --seed 1405 --headless \
+  --output outputs/phase4/recommended_seed1405.json
+```
+
+On the locked unseen seeds 1102, 1203, and 1304, this ensemble reached 65/90 (72.2%) versus the
+previous baseline's 57/90 (63.3%). It recovered 19 failed placements and regressed 11 successes.
+The +8.9-point gain is sufficient for a provisional engineering promotion, but future confirmation
+must use new rollout seeds.

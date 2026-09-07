@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-07",
+  "task_metric": "stable closed-loop grasp and lift success on unseen MuJoCo block positions",
+  "original_baseline": "outputs/phase4/chunked/bc_policy.pt",
+  "experiments": [
+    {
+      "id": "DIFF-01",
+      "hypothesis": "Conditional diffusion avoids conditional-mean action chunks.",
+      "result": {"candidate_successes": 0, "trials": 30, "rollout_seed": 404},
+      "decision": "rejected"
+    },
+    {
+      "id": "DIFF-02",
+      "hypothesis": "More DDIM steps and zero initial noise fix sampler amplification.",
+      "result": {"candidate_successes": 0, "trials": 30, "rollout_seed": 404},
+      "decision": "rejected"
+    },
+    {
+      "id": "DIFF-03",
+      "hypothesis": "A frozen BC prior stabilizes diffusion residual corrections.",
+      "full_residual": {"baseline_successes": 47, "candidate_successes": 35, "trials": 90},
+      "quarter_residual": {"baseline_successes": 47, "candidate_successes": 45, "trials": 90},
+      "decision": "rejected"
+    },
+    {
+      "id": "DATA-03",
+      "hypothesis": "Broader failure-targeted expert coverage improves the standard model.",
+      "dataset_change": "43 successful failure_replay episodes, episode_00091 through episode_00133",
+      "result": {"baseline_successes": 16, "candidate_successes": 13, "trials": 30, "rollout_seed": 707},
+      "decision": "rejected alone"
+    },
+    {
+      "id": "VISION-01",
+      "hypothesis": "Image-derived object centroid and depth restore spatial precision.",
+      "result": {"baseline_successes": 18, "candidate_successes": 17, "trials": 30, "rollout_seed": 1001},
+      "decision": "not promoted alone"
+    },
+    {
+      "id": "ENS-01",
+      "hypothesis": "Averaging model seeds 7, 17, and 27 reduces initialization variance.",
+      "development": {"baseline_successes": 18, "candidate_successes": 21, "trials": 30, "rollout_seed": 1001},
+      "locked_validation": {
+        "rollout_seeds": [1102, 1203, 1304],
+        "baseline_successes": 57,
+        "candidate_successes": 65,
+        "trials": 90,
+        "recovered_failures": 19,
+        "regressed_successes": 11,
+        "success_rate_delta_points": 8.9
+      },
+      "decision": "provisionally promoted as current recommended policy"
+    }
+  ],
+  "data_leakage_control": "Seeds 404, 505, and 606 were retired from final evaluation after their failures were added to training. ENS-01 validation used untouched seeds 1102, 1203, and 1304.",
+  "recommended_command": "./scripts/run_recommended_policy.sh --episodes 30 --seed 1405 --headless"
+}

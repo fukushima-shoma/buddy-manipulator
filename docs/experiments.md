@@ -24,7 +24,7 @@ and cannot promote a model by itself. The standard robustness check uses trainin
 | DIFF-03 | A proven BC prior can prevent visual-conditioning collapse while diffusion learns corrections. | Freeze the BC policy and diffuse only its normalized action residual. | Pending. | Pending. |
 | DATA-03 | Broader corrective coverage will improve weak workspace regions. | Add one expert trajectory at all 43 failures from rollout seeds 404/505/606, then cap replay at 20%. | 13/30 on fresh seed 707 versus baseline 16/30. | Rejected alone. |
 | VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Pending. | Pending. |
-| ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | Pending. | Pending. |
+| ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | 65/90 versus baseline 57/90 on locked validation. | Provisionally promoted. |
 
 ## DIFF-01 design decision
 
@@ -76,3 +76,25 @@ VISION-01 seed 7 reached 17/30 on fresh rollout seed 1001, compared with baselin
 does not support promotion of a single model. ENS-01 keeps split seed 7 and sampler seed 7 fixed,
 changes only model initialization seeds 7/17/27, and averages their physical action chunks. Unlike
 selecting the best random seed, this uses all prespecified models and directly targets variance.
+
+## ENS-01 promotion decision
+
+The three-model ensemble reached 21/30 on development seed 1001, compared with 18/30 for the
+original baseline. The ensemble and all settings were then locked before evaluating three untouched
+rollout seeds.
+
+| Rollout seed | Original baseline | Object-centric ensemble | Delta |
+|---:|---:|---:|---:|
+| 1102 | 19/30 | 24/30 | +5 |
+| 1203 | 21/30 | 20/30 | -1 |
+| 1304 | 17/30 | 21/30 | +4 |
+| **Total** | **57/90 (63.3%)** | **65/90 (72.2%)** | **+8 (+8.9 points)** |
+
+The paired result recovered 19 baseline failures and regressed 11 baseline successes. This is the
+first candidate with a material aggregate gain on prespecified unseen placements, so it becomes the
+current recommended policy. The result is still provisional: 90 trials are enough for an engineering
+promotion, but not a strong statistical claim. Future changes must compare against this ensemble on
+new rollout seeds rather than reuse the locked validation set.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-07-model-improvement.json`.

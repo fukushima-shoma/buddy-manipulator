@@ -178,5 +178,13 @@ seed要因を固定したcontrolled ablationも実行できる。`--split-strate
 recommended settingではない。
 モデル変更の仮説・評価結果・採否は`docs/experiments.md`へ記録する。Offline lossだけでは昇格させず、
 同じblock配置でのpaired closed-loop successを主指標にする。
+
+現在のrecommended policyは、object-centric featureを使う3-model ensembleである。未使用だった
+3 rollout seedsの合計で、旧baselineの57/90（63.3%）から65/90（72.2%）へ改善した。
+
+```bash
+./scripts/run_recommended_policy.sh --episodes 30 --seed 1405 --headless
+```
+
 モデル構造、正規化、評価指標の詳細は
 [docs/phase4.md](docs/phase4.md)を参照。
