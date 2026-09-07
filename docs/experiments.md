@@ -183,3 +183,24 @@ recurrent history and preserve the held-out protocol.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-phase5c-phase-conditioning.json`.
+
+## Phase 5D recurrent-history decision
+
+An eight-step GRU over proprioception reduced held-out MAE from the phase-conditioned model's
+0.04756 to 0.02716 without receiving the scripted phase clock. Closed-loop rollout nevertheless
+scored 0/10. The discrepancy came from teacher-forced history: at the first frame, before expert
+history exists, mean action MAE was 0.149 and base-yaw MAE was 0.104.
+
+Adding the goal-selected RGB-D object bottleneck reduced first-frame action MAE to 0.0926 and
+base-yaw MAE to 0.0762. Seed 7 then reached 3/10 on a fresh seen task and 2/10 on a fresh held-out
+task. Three models with fixed split/sampler seeds and initialization seeds 7, 17, and 27 were averaged
+without best-seed selection. The ensemble reached 5/10 on one held-out set, but its balanced fresh
+benchmark scored only 12/40: 8/10 red-to-yellow, 4/10 purple-to-yellow, and 0/10 for each green-target
+task.
+
+Phase 5D is retained as a partial research result but not promoted. History solved much of the
+offline temporal ambiguity, while the balanced rollout identified target geometry as the next
+bottleneck. Phase 5E should test explicit visual target grounding or a factorized target decoder.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-07-phase5d-recurrent-history.json`.

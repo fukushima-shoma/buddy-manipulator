@@ -63,6 +63,7 @@ def evaluate_checkpoint(
         normalization,
         action_horizon=int(config.get("action_horizon", 1)),
         phase_conditioning=int(config.get("phase_dim", 0)) > 0,
+        history_horizon=int(config.get("history_horizon", 1)),
     )
     loader = DataLoader(dataset, batch_size=batch_size)
     model = BehaviorCloningPolicy(
@@ -75,6 +76,8 @@ def evaluate_checkpoint(
         ),
         goal_dim=int(config.get("goal_dim", 0)),
         phase_dim=int(config.get("phase_dim", 0)),
+        history_horizon=int(config.get("history_horizon", 1)),
+        history_hidden_dim=int(config.get("history_hidden_dim", 64)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     metrics = evaluate_policy(model, loader, normalization, device)

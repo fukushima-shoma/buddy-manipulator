@@ -136,3 +136,42 @@ grasp acquisition and compound into transport errors. The next controlled experi
 learned recurrent history, preserving the same held-out combination and comparing against both the
 Phase 5B and phase-only baselines. Full metrics and decisions are recorded in
 `docs/experiment_results/2026-09-07-phase5c-phase-conditioning.json`.
+
+## Phase 5D: learned recurrent history
+
+Phase 5D removes the scripted clock and encodes the most recent eight normalized joint states with a
+64-unit GRU. The current RGB-D frame still passes through the CNN. At episode start, missing history
+is padded with the first observation; runner state is reset between episodes. Because demonstrations
+are sampled at 5 Hz, history checkpoints automatically execute one action before re-observation so
+the runtime window has the same cadence as training.
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 --history-horizon 8 \
+  --use-goal-object-features --holdout-goal purple:yellow --device mps \
+  --output-dir outputs/phase5/goal_bc/history8_object_seed7
+```
+
+The GRU-only model reduced held-out MAE to 0.02716, but scored 0/10 in rollout. Audit showed that
+its average validation result depended on expert-generated histories: first-frame action MAE was
+0.149 and base-yaw MAE was 0.104. Adding the goal-selected RGB-D object bottleneck reduced those
+bootstrap errors to 0.0926 and 0.0762. The resulting seed-7 model reached 3/10 on a fresh seen task
+and 2/10 on a fresh held-out task.
+
+Seeds 7, 17, and 27 were then trained with identical data split and sampling. Their equal-weight
+ensemble reached 5/10 on one fresh held-out set, but a balanced 40-scene benchmark exposed a strong
+target asymmetry:
+
+| Goal | Success |
+|---|---:|
+| red to green | 0/10 |
+| red to yellow | 8/10 |
+| purple to green | 0/10 |
+| purple to yellow (held out) | 4/10 |
+| **Total** | **12/40 (30%)** |
+
+The recurrent model is therefore not promoted. It demonstrates that learned history can greatly
+improve offline action prediction and that object grounding improves bootstrap control, but green
+target geometry remains unresolved. The next controlled experiment should provide an explicit
+observable target representation or a factorized target-conditioned decoder. Full results are in
+`docs/experiment_results/2026-09-07-phase5d-recurrent-history.json`.

@@ -1,8 +1,35 @@
 import argparse
 
+import numpy as np
 import pytest
 
-from buddy_manipulator.rollout_goal_bc import parse_goal
+from buddy_manipulator.goal_policy_rollout import resolve_execute_chunk_steps
+from buddy_manipulator.rollout_goal_bc import GoalAveragingPolicyRunner, parse_goal
+
+
+class FakeGoalPolicy:
+    def __init__(self, value: float) -> None:
+        self.value = value
+        self.action_horizon = 3
+        self.device = "cpu"
+        self.model = type(
+            "ModelConfig",
+            (),
+            {
+                "goal_dim": 4,
+                "phase_dim": 0,
+                "history_horizon": 8,
+                "use_object_features": False,
+                "use_goal_object_features": True,
+            },
+        )()
+        self.reset_seed = None
+
+    def reset(self, seed=None) -> None:
+        self.reset_seed = seed
+
+    def predict_chunk(self, _rgb, _depth, _joint, _goal, _phase=None):
+        return np.full((3, 6), self.value)
 
 
 def test_parse_goal_builds_structured_goal() -> None:
@@ -17,3 +44,17 @@ def test_parse_goal_rejects_invalid_value() -> None:
         parse_goal("red")
     with pytest.raises(argparse.ArgumentTypeError):
         parse_goal("blue:green")
+
+
+def test_goal_ensemble_averages_compatible_policies() -> None:
+    first = FakeGoalPolicy(1.0)
+    second = FakeGoalPolicy(3.0)
+    ensemble = GoalAveragingPolicyRunner([first, second])
+
+    ensemble.reset(17)
+    chunk = ensemble.predict_chunk(None, None, None, np.ones(4))
+
+    assert chunk == pytest.approx(np.full((3, 6), 2.0))
+    assert first.reset_seed == second.reset_seed == 17
+    assert resolve_execute_chunk_steps(ensemble, 0) == 1
+    assert resolve_execute_chunk_steps(ensemble, 2) == 2

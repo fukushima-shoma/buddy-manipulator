@@ -132,6 +132,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Append the scripted task's semantic phase as a one-hot input.",
     )
+    parser.add_argument(
+        "--history-horizon",
+        type=int,
+        default=1,
+        help="Number of recent proprioceptive observations encoded by a GRU.",
+    )
     return parser.parse_args()
 
 
@@ -363,12 +369,14 @@ def train(
     freeze_image_encoder: bool = False,
     holdout_goal: tuple[str, str] | None = None,
     phase_conditioning: bool = False,
+    history_horizon: int = 1,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
         or batch_size <= 0
         or learning_rate <= 0
         or action_horizon <= 0
+        or history_horizon <= 0
     ):
         raise ValueError("epochs, batch_size, and learning_rate must be positive")
     split_seed = seed if split_seed is None else split_seed
@@ -436,12 +444,14 @@ def train(
         normalization,
         action_horizon=action_horizon,
         phase_conditioning=phase_conditioning,
+        history_horizon=history_horizon,
     )
     validation_dataset = BehaviorCloningDataset(
         validation_episodes,
         normalization,
         action_horizon=action_horizon,
         phase_conditioning=phase_conditioning,
+        history_horizon=history_horizon,
     )
     test_dataset = (
         BehaviorCloningDataset(
@@ -449,6 +459,7 @@ def train(
             normalization,
             action_horizon=action_horizon,
             phase_conditioning=phase_conditioning,
+            history_horizon=history_horizon,
         )
         if test_episodes
         else None
@@ -533,6 +544,7 @@ def train(
         use_goal_object_features=use_goal_object_features,
         goal_dim=int(train_dataset.goal_dim or 0),
         phase_dim=train_dataset.phase_dim,
+        history_horizon=history_horizon,
     ).to(device)
     if initialization_checkpoint is not None:
         initial_config = initialization_checkpoint["model_config"]
@@ -549,6 +561,8 @@ def train(
             == int(train_dataset.goal_dim or 0)
             and int(initial_config.get("phase_dim", 0))
             == train_dataset.phase_dim
+            and int(initial_config.get("history_horizon", 1))
+            == history_horizon
         )
         if not compatible:
             raise ValueError("initialization checkpoint model config is incompatible")
@@ -660,6 +674,8 @@ def train(
             "use_goal_object_features": use_goal_object_features,
             "goal_dim": int(train_dataset.goal_dim or 0),
             "phase_dim": train_dataset.phase_dim,
+            "history_horizon": history_horizon,
+            "history_hidden_dim": model.history_hidden_dim,
         },
         "normalization": normalization.to_dict(),
         "train_episodes": [path.name for path in train_paths],
@@ -694,6 +710,7 @@ def train(
         "goal_dim": int(train_dataset.goal_dim or 0),
         "phase_conditioning": bool(train_dataset.phase_dim),
         "phase_dim": train_dataset.phase_dim,
+        "history_horizon": history_horizon,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
         "split_strategy": split_strategy,
@@ -749,6 +766,7 @@ def main() -> None:
         freeze_image_encoder=args.freeze_image_encoder,
         holdout_goal=parse_goal_pair(args.holdout_goal),
         phase_conditioning=args.phase_conditioning,
+        history_horizon=args.history_horizon,
     )
 
 

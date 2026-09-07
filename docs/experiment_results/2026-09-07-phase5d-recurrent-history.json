@@ -1,0 +1,73 @@
+{
+  "date": "2026-09-07",
+  "phase": "5D",
+  "objective": "replace scripted phase input with learned recurrent history and test model-seed ensembling",
+  "protocol": {
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "holdout_goal": ["purple", "yellow"],
+    "action_horizon": 8,
+    "history_horizon": 8,
+    "history_encoder": "64-unit GRU over normalized joint states",
+    "control_hz": 5.0,
+    "execute_chunk_steps": 1,
+    "split_seed": 7,
+    "sampler_seed": 7
+  },
+  "gru_only_seed7": {
+    "best_epoch": 48,
+    "validation_normalized_mse": 0.026719496822824665,
+    "validation_mean_action_mae": 0.026614556765089458,
+    "heldout_normalized_mse": 0.03031935100900192,
+    "heldout_mean_action_mae": 0.027164432852912476,
+    "initial_action_mae": 0.14935863023209903,
+    "initial_base_yaw_mae": 0.10400451409320037,
+    "seen_rollout": {"successes": 0, "trials": 10, "seed": 1914}
+  },
+  "gru_goal_object_seed7": {
+    "best_epoch": 50,
+    "validation_normalized_mse": 0.02509579605429001,
+    "validation_mean_action_mae": 0.024862362777972533,
+    "heldout_normalized_mse": 0.03306527570182202,
+    "heldout_mean_action_mae": 0.026524976261334456,
+    "initial_action_mae": 0.09259121130324073,
+    "initial_base_yaw_mae": 0.0762166262914737,
+    "seen_rollout": {"successes": 3, "trials": 10, "seed": 2116},
+    "heldout_rollout": {"successes": 2, "trials": 10, "seed": 2217}
+  },
+  "ensemble_members": [
+    {
+      "model_seed": 7,
+      "checkpoint": "outputs/phase5/goal_bc/history8_object_seed7/bc_policy.pt"
+    },
+    {
+      "model_seed": 17,
+      "checkpoint": "outputs/phase5/goal_bc/history8_object_seed17/bc_policy.pt",
+      "heldout_mean_action_mae": 0.02480076477776154
+    },
+    {
+      "model_seed": 27,
+      "checkpoint": "outputs/phase5/goal_bc/history8_object_seed27/bc_policy.pt",
+      "heldout_mean_action_mae": 0.02606352453540061
+    }
+  ],
+  "ensemble_rollout": {
+    "fixed_seen": {"successes": 0, "trials": 10, "seed": 2318},
+    "fixed_heldout": {"successes": 5, "trials": 10, "seed": 2419},
+    "balanced": {
+      "seed": 2520,
+      "successes": 12,
+      "trials": 40,
+      "per_goal": {
+        "red:green": [0, 10],
+        "red:yellow": [8, 10],
+        "purple:green": [0, 10],
+        "purple:yellow": [4, 10]
+      }
+    }
+  },
+  "finding": "recurrent history greatly improved offline metrics and object grounding improved bootstrap control, but the ensemble remained target-geometry dependent",
+  "decision": "do not promote; retain as a research baseline and test explicit target grounding next"
+}

@@ -255,6 +255,30 @@ def test_goal_phase_encoding_follows_expert_boundaries() -> None:
     assert encode_goal_phase(13.4).argmax() == GOAL_PHASE_DIM - 1
 
 
+def test_history_dataset_pads_episode_start_and_policy_uses_gru(tmp_path) -> None:
+    write_episode(tmp_path, 0, success=True, offset=0.0)
+    episode_data = load_episodes(discover_episodes(tmp_path))
+    normalization = compute_normalization(episode_data)
+    dataset = BehaviorCloningDataset(
+        episode_data,
+        normalization,
+        action_horizon=3,
+        history_horizon=3,
+    )
+
+    first_history = dataset[0]["joint_position"]
+    assert first_history.shape == (3, 6)
+    assert first_history[0].tolist() == pytest.approx(first_history[2].tolist())
+    policy = BehaviorCloningPolicy(action_horizon=3, history_horizon=3)
+    prediction = policy(
+        dataset[0]["observation"].unsqueeze(0),
+        first_history.unsqueeze(0),
+    )
+    assert prediction.shape == (1, 3, 6)
+    with pytest.raises(ValueError, match="dimensions must be positive"):
+        BehaviorCloningPolicy(history_horizon=0)
+
+
 def test_red_object_features_preserve_image_location_and_depth() -> None:
     observation = torch.zeros((1, 4, 5, 5), dtype=torch.float32)
     observation[:, 0, 1, 3] = 1.0
@@ -499,6 +523,40 @@ def test_phase_conditioned_training_writes_reusable_checkpoint(tmp_path) -> None
         batch_size=2,
         device_name="cpu",
     )
+
+
+def test_history_training_writes_stateful_runner_checkpoint(tmp_path) -> None:
+    for index in range(2):
+        write_episode(tmp_path, index, success=True, offset=index * 0.1)
+
+    checkpoint_path, report = train(
+        tmp_path,
+        tmp_path / "history_output",
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.5,
+        seed=5,
+        device_name="cpu",
+        action_horizon=3,
+        history_horizon=3,
+    )
+
+    assert report["history_horizon"] == 3
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    assert checkpoint["model_config"]["history_horizon"] == 3
+    with np.load(tmp_path / "episode_00000.npz") as arrays:
+        runner = BehaviorCloningRunner.from_checkpoint(
+            checkpoint_path,
+            device_name="cpu",
+        )
+        runner.predict_chunk(
+            arrays["rgb"][0],
+            arrays["depth"][0],
+            arrays["joint_position"][0],
+        )
+        assert len(runner._joint_history) == 1
+        runner.reset()
+        assert runner._joint_history == []
 
 
 def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:

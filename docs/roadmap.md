@@ -27,7 +27,8 @@ VLMで「赤いブロック」「左の箱」などを解釈し、対象物と�
 Phase 5Aでは、赤・紫のblockと緑・黄のtargetを使うstructured goal、RGB-D/IK
 pick-and-place expert、4次元goal付きdataset、task-level evaluatorまで実装済み。
 Phase 5B/5Cではgoal-conditioned action chunks、held-out object-target combination、semantic
-phase conditioningを評価した。次は同じsplitでrecurrent historyを比較する。
+phase conditioningを評価した。Phase 5DではGRU historyとmodel-seed ensembleを評価し、
+target geometryが次のbottleneckだと特定した。次はobservable target representationを比較する。
 
 ## Phase 6: 実機移行
 

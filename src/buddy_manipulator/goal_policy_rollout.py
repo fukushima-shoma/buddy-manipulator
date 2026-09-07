@@ -32,6 +32,16 @@ class GoalPolicyRolloutResult:
         return asdict(self)
 
 
+def resolve_execute_chunk_steps(policy: Any, requested_steps: int) -> int:
+    """Use receding-horizon execution when a checkpoint depends on dense history."""
+    if requested_steps < 0:
+        raise ValueError("execute chunk steps must be non-negative")
+    if requested_steps > 0:
+        return requested_steps
+    history_horizon = int(getattr(policy.model, "history_horizon", 1))
+    return 1 if history_horizon > 1 else int(policy.action_horizon)
+
+
 def run_closed_loop_goal_policy(
     model: Any,
     data: Any,
@@ -48,7 +58,7 @@ def run_closed_loop_goal_policy(
 ) -> GoalPolicyRolloutResult:
     if control_hz <= 0 or max_seconds <= 0 or success_hold_seconds <= 0:
         raise ValueError("timing parameters must be positive")
-    chunk_steps = policy.action_horizon if execute_chunk_steps == 0 else execute_chunk_steps
+    chunk_steps = resolve_execute_chunk_steps(policy, execute_chunk_steps)
     if chunk_steps <= 0:
         raise ValueError("execute chunk steps must be positive")
     mujoco = _mujoco()

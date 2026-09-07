@@ -229,4 +229,17 @@ timestampからsemantic phaseを生成して学習する。
 初のnon-zero success（1/10）を確認した。ただしrobust policyの基準には未達で、次は
 recurrent historyを比較する。
 
+Phase 5Dでは直近8個のjoint stateをGRUでencodeする。History policyはruntimeでも5 Hzの
+履歴を保つため、`--execute-chunk-steps`未指定時に1 actionずつreplanする。
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --epochs 50 --action-horizon 8 --history-horizon 8 \
+  --use-goal-object-features --holdout-goal purple:yellow --device mps \
+  --output-dir outputs/phase5/goal_bc/history8_object_seed7
+```
+
+3-model recurrent ensembleのbalanced benchmarkは12/40だったが、green targetは0/20だった。
+よってcheckpointはresearch baselineとして保持し、recommended policyには昇格していない。
+
 詳細は[docs/phase5.md](docs/phase5.md)を参照。

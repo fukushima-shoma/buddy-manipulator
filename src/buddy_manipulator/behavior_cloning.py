@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import random
@@ -281,13 +281,15 @@ class BehaviorCloningDataset(Dataset):
         *,
         action_horizon: int = 1,
         phase_conditioning: bool = False,
+        history_horizon: int = 1,
     ) -> None:
-        if action_horizon <= 0:
-            raise ValueError("action_horizon must be positive")
+        if action_horizon <= 0 or history_horizon <= 0:
+            raise ValueError("action and history horizons must be positive")
         self.episodes = list(episodes)
         self.normalization = normalization
         self.action_horizon = action_horizon
         self.phase_dim = GOAL_PHASE_DIM if phase_conditioning else 0
+        self.history_horizon = history_horizon
         goal_dimensions = {
             None if episode.goal is None else int(episode.goal.shape[1])
             for episode in self.episodes
@@ -337,9 +339,22 @@ class BehaviorCloningDataset(Dataset):
             action = action[0]
         sample = {
             "observation": torch.from_numpy(observation),
-            "joint_position": torch.from_numpy(joint.astype(np.float32)),
             "action": torch.from_numpy(action.astype(np.float32)),
         }
+        if self.history_horizon == 1:
+            sample["joint_position"] = torch.from_numpy(joint.astype(np.float32))
+        else:
+            history_indices = [
+                max(0, frame_index - self.history_horizon + 1 + offset)
+                for offset in range(self.history_horizon)
+            ]
+            joint_history = episode.joint_position[history_indices]
+            normalized_history = (
+                joint_history - self.normalization.joint_mean
+            ) / self.normalization.joint_std
+            sample["joint_position"] = torch.from_numpy(
+                normalized_history.astype(np.float32)
+            )
         if episode.goal is not None:
             sample["goal"] = torch.from_numpy(
                 episode.goal[frame_index].astype(np.float32)
@@ -510,10 +525,12 @@ class BehaviorCloningPolicy(nn.Module):
         use_goal_object_features: bool = False,
         goal_dim: int = 0,
         phase_dim: int = 0,
+        history_horizon: int = 1,
+        history_hidden_dim: int = 64,
     ) -> None:
         super().__init__()
-        if action_horizon <= 0:
-            raise ValueError("action_horizon must be positive")
+        if action_horizon <= 0 or history_horizon <= 0 or history_hidden_dim <= 0:
+            raise ValueError("action, history, and hidden dimensions must be positive")
         if use_goal_object_features and goal_dim < 2:
             raise ValueError("goal object features require an object-conditioned goal")
         self.action_horizon = action_horizon
@@ -521,6 +538,9 @@ class BehaviorCloningPolicy(nn.Module):
         self.use_goal_object_features = use_goal_object_features
         self.goal_dim = goal_dim
         self.phase_dim = phase_dim
+        self.state_dim = state_dim
+        self.history_horizon = history_horizon
+        self.history_hidden_dim = history_hidden_dim
         self.image_encoder = nn.Sequential(
             nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
@@ -531,10 +551,22 @@ class BehaviorCloningPolicy(nn.Module):
             MpsSafeAdaptiveAvgPool2d((2, 2)),
             nn.Flatten(),
         )
+        self.history_encoder = (
+            nn.GRU(
+                input_size=state_dim,
+                hidden_size=history_hidden_dim,
+                batch_first=True,
+            )
+            if history_horizon > 1
+            else None
+        )
+        state_feature_dim = (
+            history_hidden_dim if history_horizon > 1 else state_dim
+        )
         self.action_head = nn.Sequential(
             nn.Linear(
                 64 * 2 * 2
-                + state_dim
+                + state_feature_dim
                 + (4 if use_object_features else 0)
                 + (4 if use_goal_object_features else 0)
                 + goal_dim
@@ -555,7 +587,26 @@ class BehaviorCloningPolicy(nn.Module):
         phase: torch.Tensor | None = None,
     ) -> torch.Tensor:
         image_features = self.image_encoder(observation)
-        policy_features = [image_features, joint_position]
+        if self.history_encoder is None:
+            if joint_position.shape != (observation.shape[0], self.state_dim):
+                raise ValueError(
+                    f"joint_position must have shape (batch, {self.state_dim})"
+                )
+            state_features = joint_position
+        else:
+            expected_shape = (
+                observation.shape[0],
+                self.history_horizon,
+                self.state_dim,
+            )
+            if joint_position.shape != expected_shape:
+                raise ValueError(
+                    "joint_position must have shape "
+                    f"(batch, {self.history_horizon}, {self.state_dim})"
+                )
+            _, hidden = self.history_encoder(joint_position)
+            state_features = hidden[-1]
+        policy_features = [image_features, state_features]
         if self.use_object_features:
             policy_features.append(extract_red_object_features(observation))
         if self.use_goal_object_features:
@@ -618,6 +669,7 @@ class BehaviorCloningRunner:
     model: BehaviorCloningPolicy
     normalization: NormalizationStats
     device: torch.device
+    _joint_history: list[np.ndarray] = field(default_factory=list, init=False)
 
     @classmethod
     def from_checkpoint(
@@ -645,6 +697,8 @@ class BehaviorCloningRunner:
             ),
             goal_dim=int(config.get("goal_dim", 0)),
             phase_dim=int(config.get("phase_dim", 0)),
+            history_horizon=int(config.get("history_horizon", 1)),
+            history_hidden_dim=int(config.get("history_hidden_dim", 64)),
         ).to(device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
@@ -668,6 +722,10 @@ class BehaviorCloningRunner:
     def action_horizon(self) -> int:
         return self.model.action_horizon
 
+    def reset(self, seed: int | None = None) -> None:
+        del seed
+        self._joint_history.clear()
+
     def predict_chunk(
         self,
         rgb: np.ndarray,
@@ -685,9 +743,16 @@ class BehaviorCloningRunner:
         observation_tensor = torch.from_numpy(observation).unsqueeze(0).to(
             self.device
         )
-        joint_tensor = torch.from_numpy(normalized_joint).unsqueeze(0).to(
-            self.device
-        )
+        if self.model.history_horizon == 1:
+            joint_input = normalized_joint
+        else:
+            self._joint_history.append(normalized_joint.copy())
+            self._joint_history = self._joint_history[-self.model.history_horizon :]
+            padded_history = [self._joint_history[0]] * (
+                self.model.history_horizon - len(self._joint_history)
+            )
+            joint_input = np.stack([*padded_history, *self._joint_history])
+        joint_tensor = torch.from_numpy(joint_input).unsqueeze(0).to(self.device)
         goal_tensor = (
             torch.from_numpy(goal.astype(np.float32)).unsqueeze(0).to(self.device)
             if goal is not None
