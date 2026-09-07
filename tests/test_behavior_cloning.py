@@ -11,6 +11,7 @@ from buddy_manipulator.behavior_cloning import (
     MpsSafeAdaptiveAvgPool2d,
     compute_normalization,
     discover_episodes,
+    extract_red_object_features,
     load_episodes,
     split_episodes,
     split_episodes_spatially,
@@ -175,6 +176,30 @@ def test_dataset_and_policy_shapes(tmp_path) -> None:
         sample["joint_position"].unsqueeze(0),
     )
     assert chunk_prediction.shape == (1, 3, 6)
+
+    object_policy = BehaviorCloningPolicy(
+        action_horizon=3,
+        use_object_features=True,
+    )
+    object_prediction = object_policy(
+        sample["observation"].unsqueeze(0),
+        sample["joint_position"].unsqueeze(0),
+    )
+    assert object_prediction.shape == (1, 3, 6)
+
+
+def test_red_object_features_preserve_image_location_and_depth() -> None:
+    observation = torch.zeros((1, 4, 5, 5), dtype=torch.float32)
+    observation[:, 0, 1, 3] = 1.0
+    observation[:, 3, 1, 3] = 2.5
+
+    features = extract_red_object_features(observation)
+
+    assert features.shape == (1, 4)
+    assert features[0].tolist() == pytest.approx((0.5, -0.5, 2.5, 4.0))
+    assert extract_red_object_features(torch.zeros_like(observation))[0].tolist() == (
+        pytest.approx((0.0, 0.0, 0.0, 0.0))
+    )
 
 
 def test_failure_replay_weights_target_requested_source_fraction(tmp_path) -> None:

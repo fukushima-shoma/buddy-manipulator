@@ -35,6 +35,7 @@ def load_bc_prior(
         image_channels=int(config["image_channels"]),
         state_dim=int(config["state_dim"]),
         action_horizon=int(config.get("action_horizon", 1)),
+        use_object_features=bool(config.get("use_object_features", False)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval().requires_grad_(False)
@@ -138,6 +139,7 @@ class ResidualDiffusionRunner:
             image_channels=int(base_config["image_channels"]),
             state_dim=int(base_config["state_dim"]),
             action_horizon=int(base_config.get("action_horizon", 1)),
+            use_object_features=bool(base_config.get("use_object_features", False)),
         ).to(device)
         base_model.load_state_dict(checkpoint["base_model_state_dict"])
         base_model.eval().requires_grad_(False)

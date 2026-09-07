@@ -374,6 +374,43 @@ class MpsSafeAdaptiveAvgPool2d(nn.Module):
         return torch.stack(rows, dim=-2)
 
 
+def extract_red_object_features(observation: torch.Tensor) -> torch.Tensor:
+    """Extract a compact image-space object location from normalized RGB-D."""
+    if observation.ndim != 4 or observation.shape[1] != 4:
+        raise ValueError("observation must have shape (batch, 4, height, width)")
+    red, green, blue, depth = observation.unbind(dim=1)
+    mask = (
+        (red > 0.35)
+        & (red > green * 1.35)
+        & (red > blue * 1.35)
+    ).to(dtype=observation.dtype)
+    height, width = mask.shape[-2:]
+    x_coordinates = torch.linspace(
+        -1.0,
+        1.0,
+        width,
+        dtype=observation.dtype,
+        device=observation.device,
+    ).reshape(1, 1, width)
+    y_coordinates = torch.linspace(
+        -1.0,
+        1.0,
+        height,
+        dtype=observation.dtype,
+        device=observation.device,
+    ).reshape(1, height, 1)
+    pixel_count = mask.sum(dim=(1, 2))
+    safe_pixel_count = pixel_count.clamp_min(1.0)
+    centroid_x = (mask * x_coordinates).sum(dim=(1, 2)) / safe_pixel_count
+    centroid_y = (mask * y_coordinates).sum(dim=(1, 2)) / safe_pixel_count
+    mean_depth = (mask * depth).sum(dim=(1, 2)) / safe_pixel_count
+    area_percent = pixel_count * (100.0 / float(height * width))
+    return torch.stack(
+        [centroid_x, centroid_y, mean_depth, area_percent],
+        dim=1,
+    )
+
+
 class BehaviorCloningPolicy(nn.Module):
     """Small CNN policy for RGB-D and proprioceptive observations."""
 
@@ -383,11 +420,13 @@ class BehaviorCloningPolicy(nn.Module):
         image_channels: int = 4,
         state_dim: int = 6,
         action_horizon: int = 1,
+        use_object_features: bool = False,
     ) -> None:
         super().__init__()
         if action_horizon <= 0:
             raise ValueError("action_horizon must be positive")
         self.action_horizon = action_horizon
+        self.use_object_features = use_object_features
         self.image_encoder = nn.Sequential(
             nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
@@ -399,7 +438,10 @@ class BehaviorCloningPolicy(nn.Module):
             nn.Flatten(),
         )
         self.action_head = nn.Sequential(
-            nn.Linear(64 * 2 * 2 + state_dim, 128),
+            nn.Linear(
+                64 * 2 * 2 + state_dim + (4 if use_object_features else 0),
+                128,
+            ),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -410,8 +452,11 @@ class BehaviorCloningPolicy(nn.Module):
         self, observation: torch.Tensor, joint_position: torch.Tensor
     ) -> torch.Tensor:
         image_features = self.image_encoder(observation)
+        policy_features = [image_features, joint_position]
+        if self.use_object_features:
+            policy_features.append(extract_red_object_features(observation))
         action = self.action_head(
-            torch.cat([image_features, joint_position], dim=1)
+            torch.cat(policy_features, dim=1)
         )
         if self.action_horizon == 1:
             return action
@@ -471,6 +516,7 @@ class BehaviorCloningRunner:
             image_channels=int(config["image_channels"]),
             state_dim=int(config["state_dim"]),
             action_horizon=int(config.get("action_horizon", 1)),
+            use_object_features=bool(config.get("use_object_features", False)),
         ).to(device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()

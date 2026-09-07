@@ -64,6 +64,7 @@ def evaluate_checkpoint(
         image_channels=int(config["image_channels"]),
         state_dim=int(config["state_dim"]),
         action_horizon=int(config.get("action_horizon", 1)),
+        use_object_features=bool(config.get("use_object_features", False)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     metrics = evaluate_policy(model, loader, normalization, device)

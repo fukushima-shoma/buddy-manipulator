@@ -68,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Number of future actions predicted from each observation.",
     )
+    parser.add_argument(
+        "--use-object-features",
+        action="store_true",
+        help="Append a differentiable red-object RGB-D bottleneck to CNN features.",
+    )
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "mps", "cuda"))
     parser.add_argument(
         "--include-failures",
@@ -296,6 +301,7 @@ def train(
     split_strategy: str = "random",
     spatial_bins: int = 3,
     source_sampling: str = "replacement",
+    use_object_features: bool = False,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -407,7 +413,10 @@ def train(
     validation_loader = DataLoader(validation_dataset, batch_size=batch_size)
 
     device = choose_device(device_name)
-    model = BehaviorCloningPolicy(action_horizon=action_horizon).to(device)
+    model = BehaviorCloningPolicy(
+        action_horizon=action_horizon,
+        use_object_features=use_object_features,
+    ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_function = nn.SmoothL1Loss()
     history = []
@@ -468,6 +477,7 @@ def train(
             "state_dim": 6,
             "action_dim": 6,
             "action_horizon": action_horizon,
+            "use_object_features": use_object_features,
         },
         "normalization": normalization.to_dict(),
         "train_episodes": [path.name for path in train_paths],
@@ -491,6 +501,7 @@ def train(
         "device": str(device),
         "epochs": epochs,
         "action_horizon": action_horizon,
+        "use_object_features": use_object_features,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
         "split_strategy": split_strategy,
@@ -531,6 +542,7 @@ def main() -> None:
         split_seed=args.split_seed,
         model_seed=args.model_seed,
         sampler_seed=args.sampler_seed,
+        use_object_features=args.use_object_features,
     )
 
 

@@ -22,6 +22,8 @@ and cannot promote a model by itself. The standard robustness check uses trainin
 | DIFF-01 | Modeling a distribution over action chunks avoids harmful conditional means. | Conditional RGB-D DDPM with EMA and deterministic DDIM rollout. | 0/30 on rollout seed 404. | Rejected. |
 | DIFF-02 | The 10-step sampler amplifies high-noise prediction errors. | Compare more DDIM steps and reduced initial noise without retraining. | 25-step zero-noise sampling also produced 0/30. | Rejected. |
 | DIFF-03 | A proven BC prior can prevent visual-conditioning collapse while diffusion learns corrections. | Freeze the BC policy and diffuse only its normalized action residual. | Pending. | Pending. |
+| DATA-03 | Broader corrective coverage will improve weak workspace regions. | Add one expert trajectory at all 43 failures from rollout seeds 404/505/606, then cap replay at 20%. | 13/30 on fresh seed 707 versus baseline 16/30. | Rejected alone. |
+| VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Pending. | Pending. |
 
 ## DIFF-01 design decision
 
@@ -48,3 +50,23 @@ DIFF-02 also produced 0/30. At the initial robot state, the true block-heading t
 prediction was nearly constant around 0.332 rad and had correlation 0.39. The model learned the
 action distribution but underused the image condition at the critical approach stage. DIFF-03 will
 therefore retain the BC action as a frozen visual prior and model only a bounded residual.
+
+## DIFF-03 and DATA-03 decisions
+
+Full residual correction reached 35/90 (38.9%) versus the paired baseline's 47/90 (52.2%). It
+recovered 19 baseline failures but regressed 31 successes. A 25% correction blend improved the
+development seed 404 from 15/30 to 17/30, but validation seeds 505 and 606 gave an aggregate 45/90,
+still below baseline. DIFF-03 is not promoted.
+
+Episodes 00091 through 00133 add one successful expert correction at each of the baseline failures
+from rollout seeds 404, 505, and 606. All 43 new episodes passed dataset validation. Retraining the
+standard BC policy with a 20% replay cap scored 13/30 on fresh seed 707 versus baseline 16/30. This
+shows that corrective coverage alone is insufficient with the current representation.
+
+## VISION-01 design decision
+
+Failure analysis repeatedly points to initial base-yaw localization. The standard CNN ends in a
+2x2 average-pooled map, which is intentionally small but weak for precise spatial coordinates.
+VISION-01 appends four observable RGB-D features: red-mask centroid X/Y, normalized masked depth,
+and mask area. It does not use simulator object state and remains compatible with a real RGB-D
+camera. The CNN remains present, so the bottleneck augments rather than replaces learned vision.
