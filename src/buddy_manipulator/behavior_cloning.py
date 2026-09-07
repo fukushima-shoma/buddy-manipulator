@@ -19,6 +19,7 @@ class EpisodePath:
     data_path: Path
     metadata_path: Path
     source: str
+    block_position: tuple[float, float, float]
 
     @property
     def name(self) -> str:
@@ -89,6 +90,10 @@ def discover_episodes(
                 data_path=data_path,
                 metadata_path=metadata_path,
                 source=str(metadata.get("source", "legacy")),
+                block_position=tuple(
+                    float(value)
+                    for value in metadata["block_start_position_m"]
+                ),
             )
         )
     return episodes
@@ -123,6 +128,81 @@ def split_episodes(
         max(1, round(len(shuffled) * validation_fraction)),
     )
     return shuffled[validation_count:], shuffled[:validation_count]
+
+
+def split_episodes_spatially(
+    episodes: Sequence[EpisodePath],
+    *,
+    validation_fraction: float,
+    seed: int,
+    bins_per_axis: int = 3,
+) -> tuple[list[EpisodePath], list[EpisodePath]]:
+    """Split episodes while preserving spatial and collection-source coverage."""
+    if len(episodes) < 2:
+        raise ValueError("behavior cloning needs at least two episodes")
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be between 0 and 1")
+    if bins_per_axis <= 0:
+        raise ValueError("bins_per_axis must be positive")
+
+    x_values = [episode.block_position[0] for episode in episodes]
+    y_values = [episode.block_position[1] for episode in episodes]
+    x_min, x_max = min(x_values), max(x_values)
+    y_min, y_max = min(y_values), max(y_values)
+
+    def bin_index(value: float, lower: float, upper: float) -> int:
+        if upper <= lower:
+            return 0
+        normalized = (value - lower) / (upper - lower)
+        return min(bins_per_axis - 1, max(0, int(normalized * bins_per_axis)))
+
+    strata: dict[tuple[int, int, str], list[EpisodePath]] = {}
+    for episode in episodes:
+        key = (
+            bin_index(episode.block_position[0], x_min, x_max),
+            bin_index(episode.block_position[1], y_min, y_max),
+            episode.source,
+        )
+        strata.setdefault(key, []).append(episode)
+
+    validation_count = min(
+        len(episodes) - 1,
+        max(1, round(len(episodes) * validation_fraction)),
+    )
+    capacities = {key: max(0, len(group) - 1) for key, group in strata.items()}
+    if sum(capacities.values()) < validation_count:
+        raise ValueError("cannot retain one training episode per spatial/source stratum")
+    allocations = {
+        key: min(capacities[key], int(len(group) * validation_fraction))
+        for key, group in strata.items()
+    }
+    rng = random.Random(seed)
+    tie_breakers = {key: rng.random() for key in strata}
+    while sum(allocations.values()) < validation_count:
+        eligible = [
+            key for key in strata if allocations[key] < capacities[key]
+        ]
+        selected = max(
+            eligible,
+            key=lambda key: (
+                len(strata[key]) * validation_fraction - allocations[key],
+                tie_breakers[key],
+            ),
+        )
+        allocations[selected] += 1
+
+    train_episodes = []
+    validation_episodes = []
+    for key in sorted(strata):
+        group = sorted(strata[key], key=lambda episode: episode.name)
+        rng.shuffle(group)
+        split_index = allocations[key]
+        validation_episodes.extend(group[:split_index])
+        train_episodes.extend(group[split_index:])
+    return (
+        sorted(train_episodes, key=lambda episode: episode.name),
+        sorted(validation_episodes, key=lambda episode: episode.name),
+    )
 
 
 def load_episodes(episode_paths: Sequence[EpisodePath]) -> list[EpisodeData]:

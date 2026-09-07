@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from fractions import Fraction
 import json
 from pathlib import Path
 import random
@@ -12,7 +13,7 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 
 from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
@@ -24,6 +25,7 @@ from buddy_manipulator.behavior_cloning import (
     discover_episodes,
     load_episodes,
     split_episodes,
+    split_episodes_spatially,
 )
 
 
@@ -35,6 +37,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
+    parser.add_argument(
+        "--split-strategy",
+        choices=("random", "spatial"),
+        default="random",
+    )
+    parser.add_argument("--spatial-bins", type=int, default=3)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
         "--split-seed",
@@ -72,8 +80,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Target fraction drawn from failure_replay episodes using "
-            "weighted sampling with replacement."
+            "the selected source-sampling strategy."
         ),
+    )
+    parser.add_argument(
+        "--source-sampling",
+        choices=("replacement", "minimal-replacement", "without-replacement"),
+        default="replacement",
+        help="How source-balanced samples are selected within each epoch.",
     )
     return parser.parse_args()
 
@@ -97,6 +111,132 @@ def failure_replay_sample_weights(
     weights[replay_mask] = failure_replay_fraction / replay_count
     weights[~replay_mask] = (1.0 - failure_replay_fraction) / broad_count
     return torch.from_numpy(weights)
+
+
+class SourceBalancedSampler(Sampler[int]):
+    """Draw an exact source ratio without duplicate samples within an epoch."""
+
+    def __init__(
+        self,
+        sample_sources: list[str],
+        failure_replay_fraction: float,
+        *,
+        seed: int,
+    ) -> None:
+        if not 0.0 < failure_replay_fraction < 1.0:
+            raise ValueError("failure_replay_fraction must be between 0 and 1")
+        replay = [
+            index
+            for index, source in enumerate(sample_sources)
+            if source == "failure_replay"
+        ]
+        broad = [
+            index
+            for index, source in enumerate(sample_sources)
+            if source != "failure_replay"
+        ]
+        if not replay or not broad:
+            raise ValueError(
+                "source balancing needs both failure_replay and non-replay samples"
+            )
+
+        ratio = Fraction(str(failure_replay_fraction)).limit_denominator(1000)
+        replay_per_unit = ratio.numerator
+        broad_per_unit = ratio.denominator - ratio.numerator
+        units = min(
+            len(replay) // replay_per_unit,
+            len(broad) // broad_per_unit,
+        )
+        if units <= 0:
+            raise ValueError("cannot construct a source-balanced epoch")
+        replay_samples = units * replay_per_unit
+        broad_samples = units * broad_per_unit
+
+        self.replay_indices = torch.tensor(replay, dtype=torch.int64)
+        self.broad_indices = torch.tensor(broad, dtype=torch.int64)
+        self.replay_samples = replay_samples
+        self.broad_samples = broad_samples
+        self.generator = torch.Generator().manual_seed(seed)
+
+    def __len__(self) -> int:
+        return self.replay_samples + self.broad_samples
+
+    def __iter__(self):
+        replay_order = torch.randperm(
+            len(self.replay_indices), generator=self.generator
+        )[: self.replay_samples]
+        broad_order = torch.randperm(
+            len(self.broad_indices), generator=self.generator
+        )[: self.broad_samples]
+        selected = torch.cat(
+            [
+                self.replay_indices[replay_order],
+                self.broad_indices[broad_order],
+            ]
+        )
+        order = torch.randperm(len(selected), generator=self.generator)
+        return iter(selected[order].tolist())
+
+
+class MinimalReplacementSourceSampler(Sampler[int]):
+    """Keep epoch length and exact source ratio while minimizing duplicates."""
+
+    def __init__(
+        self,
+        sample_sources: list[str],
+        failure_replay_fraction: float,
+        *,
+        seed: int,
+    ) -> None:
+        if not 0.0 < failure_replay_fraction < 1.0:
+            raise ValueError("failure_replay_fraction must be between 0 and 1")
+        replay = [
+            index
+            for index, source in enumerate(sample_sources)
+            if source == "failure_replay"
+        ]
+        broad = [
+            index
+            for index, source in enumerate(sample_sources)
+            if source != "failure_replay"
+        ]
+        if not replay or not broad:
+            raise ValueError(
+                "source balancing needs both failure_replay and non-replay samples"
+            )
+        ratio = Fraction(str(failure_replay_fraction)).limit_denominator(1000)
+        units = len(sample_sources) // ratio.denominator
+        if units <= 0:
+            raise ValueError("cannot construct a source-balanced epoch")
+
+        self.replay_indices = torch.tensor(replay, dtype=torch.int64)
+        self.broad_indices = torch.tensor(broad, dtype=torch.int64)
+        self.replay_samples = units * ratio.numerator
+        self.broad_samples = units * (ratio.denominator - ratio.numerator)
+        self.generator = torch.Generator().manual_seed(seed)
+
+    def __len__(self) -> int:
+        return self.replay_samples + self.broad_samples
+
+    def _draw(self, indices: torch.Tensor, count: int) -> torch.Tensor:
+        chunks = []
+        remaining = count
+        while remaining > 0:
+            order = torch.randperm(len(indices), generator=self.generator)
+            take = min(remaining, len(indices))
+            chunks.append(indices[order[:take]])
+            remaining -= take
+        return torch.cat(chunks)
+
+    def __iter__(self):
+        selected = torch.cat(
+            [
+                self._draw(self.replay_indices, self.replay_samples),
+                self._draw(self.broad_indices, self.broad_samples),
+            ]
+        )
+        order = torch.randperm(len(selected), generator=self.generator)
+        return iter(selected[order].tolist())
 
 
 def evaluate_policy(
@@ -153,6 +293,9 @@ def train(
     split_seed: int | None = None,
     model_seed: int | None = None,
     sampler_seed: int | None = None,
+    split_strategy: str = "random",
+    spatial_bins: int = 3,
+    source_sampling: str = "replacement",
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -171,9 +314,19 @@ def train(
     torch.manual_seed(model_seed)
 
     paths = discover_episodes(dataset_dir, successful_only=successful_only)
-    train_paths, validation_paths = split_episodes(
-        paths, validation_fraction=validation_fraction, seed=split_seed
-    )
+    if split_strategy == "random":
+        train_paths, validation_paths = split_episodes(
+            paths, validation_fraction=validation_fraction, seed=split_seed
+        )
+    elif split_strategy == "spatial":
+        train_paths, validation_paths = split_episodes_spatially(
+            paths,
+            validation_fraction=validation_fraction,
+            seed=split_seed,
+            bins_per_axis=spatial_bins,
+        )
+    else:
+        raise ValueError(f"unknown split strategy: {split_strategy}")
     train_episodes = load_episodes(train_paths)
     validation_episodes = load_episodes(validation_paths)
     normalization = compute_normalization(train_episodes)
@@ -189,6 +342,10 @@ def train(
     )
     generator = torch.Generator().manual_seed(sampler_seed)
     if failure_replay_fraction is None:
+        if source_sampling != "replacement":
+            raise ValueError(
+                "source_sampling requires failure_replay_fraction"
+            )
         train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
@@ -196,7 +353,7 @@ def train(
             generator=generator,
         )
         sampling_description = "natural"
-    else:
+    elif source_sampling == "replacement":
         sample_weights = failure_replay_sample_weights(
             train_dataset,
             failure_replay_fraction,
@@ -213,8 +370,40 @@ def train(
             sampler=sampler,
         )
         sampling_description = (
-            f"failure_replay={failure_replay_fraction:.0%}"
+            f"failure_replay={failure_replay_fraction:.0%}/replacement"
         )
+    elif source_sampling == "without-replacement":
+        sampler = SourceBalancedSampler(
+            train_dataset.sample_sources,
+            failure_replay_fraction,
+            seed=sampler_seed,
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+        )
+        sampling_description = (
+            f"failure_replay={failure_replay_fraction:.0%}/without-replacement/"
+            f"{len(sampler)} samples"
+        )
+    elif source_sampling == "minimal-replacement":
+        sampler = MinimalReplacementSourceSampler(
+            train_dataset.sample_sources,
+            failure_replay_fraction,
+            seed=sampler_seed,
+        )
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+        )
+        sampling_description = (
+            f"failure_replay={failure_replay_fraction:.0%}/minimal-replacement/"
+            f"{len(sampler)} samples"
+        )
+    else:
+        raise ValueError(f"unknown source sampling strategy: {source_sampling}")
     validation_loader = DataLoader(validation_dataset, batch_size=batch_size)
 
     device = choose_device(device_name)
@@ -285,6 +474,9 @@ def train(
         "validation_episodes": [path.name for path in validation_paths],
         "successful_only": successful_only,
         "failure_replay_fraction": failure_replay_fraction,
+        "source_sampling": source_sampling,
+        "split_strategy": split_strategy,
+        "spatial_bins": spatial_bins,
         "seed": seed,
         "split_seed": split_seed,
         "model_seed": model_seed,
@@ -300,6 +492,9 @@ def train(
         "epochs": epochs,
         "action_horizon": action_horizon,
         "failure_replay_fraction": failure_replay_fraction,
+        "source_sampling": source_sampling,
+        "split_strategy": split_strategy,
+        "spatial_bins": spatial_bins,
         "seed": seed,
         "split_seed": split_seed,
         "model_seed": model_seed,
@@ -330,6 +525,9 @@ def main() -> None:
         successful_only=not args.include_failures,
         action_horizon=args.action_horizon,
         failure_replay_fraction=args.failure_replay_fraction,
+        source_sampling=args.source_sampling,
+        split_strategy=args.split_strategy,
+        spatial_bins=args.spatial_bins,
         split_seed=args.split_seed,
         model_seed=args.model_seed,
         sampler_seed=args.sampler_seed,

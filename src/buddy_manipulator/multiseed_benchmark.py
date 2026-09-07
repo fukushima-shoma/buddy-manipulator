@@ -72,8 +72,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
+    parser.add_argument(
+        "--split-strategy",
+        choices=("random", "spatial"),
+        default="random",
+    )
+    parser.add_argument("--spatial-bins", type=int, default=3)
     parser.add_argument("--action-horizon", type=int, default=8)
     parser.add_argument("--failure-replay-fraction", type=float, default=0.2)
+    parser.add_argument(
+        "--source-sampling",
+        choices=("replacement", "minimal-replacement", "without-replacement"),
+        default="replacement",
+    )
     parser.add_argument(
         "--device",
         default="auto",
@@ -310,6 +321,10 @@ def main() -> None:
             str(args.learning_rate),
             "--validation-fraction",
             str(args.validation_fraction),
+            "--split-strategy",
+            args.split_strategy,
+            "--spatial-bins",
+            str(args.spatial_bins),
             "--seed",
             str(args.fixed_seed),
             "--split-seed",
@@ -322,6 +337,8 @@ def main() -> None:
             str(args.action_horizon),
             "--failure-replay-fraction",
             str(args.failure_replay_fraction),
+            "--source-sampling",
+            args.source_sampling,
             "--device",
             args.device,
         ]
@@ -367,8 +384,11 @@ def main() -> None:
         "batch_size": args.batch_size,
         "learning_rate": args.learning_rate,
         "validation_fraction": args.validation_fraction,
+        "split_strategy": args.split_strategy,
+        "spatial_bins": args.spatial_bins,
         "action_horizon": args.action_horizon,
         "failure_replay_fraction": args.failure_replay_fraction,
+        "source_sampling": args.source_sampling,
         "device": args.device,
     }
     summary_path = args.output_dir / "summary.json"

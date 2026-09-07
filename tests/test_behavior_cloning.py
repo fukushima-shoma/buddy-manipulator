@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import pytest
 import torch
 
 from buddy_manipulator.behavior_cloning import (
@@ -12,10 +13,16 @@ from buddy_manipulator.behavior_cloning import (
     discover_episodes,
     load_episodes,
     split_episodes,
+    split_episodes_spatially,
 )
 from buddy_manipulator.dataset import save_episode
 from buddy_manipulator.evaluate_bc import evaluate_checkpoint
-from buddy_manipulator.train_bc import failure_replay_sample_weights, train
+from buddy_manipulator.train_bc import (
+    MinimalReplacementSourceSampler,
+    SourceBalancedSampler,
+    failure_replay_sample_weights,
+    train,
+)
 
 
 def write_episode(
@@ -25,6 +32,7 @@ def write_episode(
     success: bool,
     offset: float,
     source: str = "scripted",
+    block_position: tuple[float, float, float] = (0.3, 0.08, 0.025),
 ) -> None:
     samples = 4
     rng = np.random.default_rng(index)
@@ -50,7 +58,7 @@ def write_episode(
         index,
         arrays,
         success=success,
-        block_start_position=(0.3, 0.08, 0.025),
+        block_start_position=block_position,
         source=source,
     )
 
@@ -66,12 +74,66 @@ def test_episode_discovery_filters_failures_and_splits_by_episode(tmp_path) -> N
         "episode_00002",
     ]
     assert [episode.source for episode in episodes] == ["scripted", "scripted"]
+    assert episodes[0].block_position == (0.3, 0.08, 0.025)
     train_episodes, validation_episodes = split_episodes(
         episodes, validation_fraction=0.5, seed=3
     )
     assert {episode.name for episode in train_episodes}.isdisjoint(
         episode.name for episode in validation_episodes
     )
+
+
+def test_spatial_split_preserves_each_populated_workspace_cell(tmp_path) -> None:
+    episode_index = 0
+    for x in (0.0, 1.0, 2.0):
+        for y in (0.0, 1.0, 2.0):
+            for repeat in range(3):
+                write_episode(
+                    tmp_path,
+                    episode_index,
+                    success=True,
+                    offset=repeat * 0.01,
+                    block_position=(x, y, 0.025),
+                )
+                episode_index += 1
+
+    train_episodes, validation_episodes = split_episodes_spatially(
+        discover_episodes(tmp_path),
+        validation_fraction=1 / 3,
+        seed=7,
+        bins_per_axis=3,
+    )
+
+    assert len(train_episodes) == 18
+    assert len(validation_episodes) == 9
+    expected_cells = {(x, y) for x in (0.0, 1.0, 2.0) for y in (0.0, 1.0, 2.0)}
+    assert {
+        episode.block_position[:2] for episode in train_episodes
+    } == expected_cells
+    assert {
+        episode.block_position[:2] for episode in validation_episodes
+    } == expected_cells
+
+
+def test_spatial_split_retains_singleton_collection_source_in_training(tmp_path) -> None:
+    for index in range(4):
+        write_episode(tmp_path, index, success=True, offset=index * 0.01)
+    write_episode(
+        tmp_path,
+        4,
+        success=True,
+        offset=0.04,
+        source="teleop",
+    )
+
+    train_episodes, validation_episodes = split_episodes_spatially(
+        discover_episodes(tmp_path),
+        validation_fraction=0.4,
+        seed=7,
+    )
+
+    assert len(validation_episodes) == 2
+    assert any(episode.source == "teleop" for episode in train_episodes)
 
 
 def test_dataset_and_policy_shapes(tmp_path) -> None:
@@ -139,6 +201,35 @@ def test_failure_replay_weights_target_requested_source_fraction(tmp_path) -> No
     assert broad_weight == 0.8
 
 
+def test_source_balanced_sampler_is_exact_unique_and_reproducible() -> None:
+    sources = ["failure_replay"] * 8 + ["scripted"] * 8
+    first = SourceBalancedSampler(sources, 0.25, seed=17)
+    second = SourceBalancedSampler(sources, 0.25, seed=17)
+
+    first_epoch = list(first)
+    assert first_epoch == list(second)
+    assert len(first_epoch) == len(set(first_epoch)) == 8
+    assert sum(sources[index] == "failure_replay" for index in first_epoch) == 2
+    assert sum(sources[index] != "failure_replay" for index in first_epoch) == 6
+
+    assert list(first) == list(second)
+
+
+def test_minimal_replacement_sampler_preserves_epoch_size_and_exact_ratio() -> None:
+    sources = ["failure_replay"] * 8 + ["scripted"] * 8
+    first = MinimalReplacementSourceSampler(sources, 0.25, seed=17)
+    second = MinimalReplacementSourceSampler(sources, 0.25, seed=17)
+
+    first_epoch = list(first)
+    assert first_epoch == list(second)
+    assert len(first_epoch) == 16
+    assert len(set(first_epoch)) == 12
+    assert sum(sources[index] == "failure_replay" for index in first_epoch) == 4
+    assert sum(sources[index] != "failure_replay" for index in first_epoch) == 12
+
+    assert list(first) == list(second)
+
+
 def test_mps_safe_pool_matches_native_adaptive_pool() -> None:
     feature_map = torch.arange(2 * 3 * 15 * 20, dtype=torch.float32).reshape(
         2, 3, 15, 20
@@ -191,6 +282,8 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
     assert checkpoint["split_seed"] == 11
     assert checkpoint["model_seed"] == 13
     assert checkpoint["sampler_seed"] == 17
+    assert checkpoint["split_strategy"] == "random"
+    assert checkpoint["source_sampling"] == "replacement"
     assert checkpoint["model_config"]["action_horizon"] == 3
 
     with np.load(dataset_dir / "episode_00000.npz") as arrays:
@@ -205,3 +298,17 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
         )
     assert action_chunk.shape == (3, 6)
     assert np.all(np.isfinite(action_chunk))
+
+
+def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:
+    write_episode(tmp_path, 0, success=True, offset=0.0)
+    write_episode(tmp_path, 1, success=True, offset=0.1)
+
+    with pytest.raises(ValueError, match="requires failure_replay_fraction"):
+        train(
+            tmp_path,
+            tmp_path / "output",
+            epochs=1,
+            validation_fraction=0.5,
+            source_sampling="without-replacement",
+        )

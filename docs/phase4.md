@@ -269,6 +269,36 @@ experimentであり、要因間interactionを含むformal variance decomposition
 source比率を保ちながらsample重複を抑えるdeterministic balanced samplerを優先する。各factorの
 結果は`outputs/phase4/seed_ablation/{model,sampler,split}/summary.json`に保存される。
 
+### Split and sampler stabilization experiment
+
+上記仮説を検証するため、`--split-strategy spatial --spatial-bins 3`を実装した。XY workspaceを
+3×3に分割し、collection sourceも含めた各stratumから最低1 episodeをtrainに残しながら、
+validation件数を厳密に割り当てる。
+
+Source samplerには次の2つのdeterministic controlを追加した。
+
+- `--source-sampling without-replacement`: exact source ratioを保てる最大epochを作り、重複を0にする
+- `--source-sampling minimal-replacement`: 元のepoch長をほぼ維持し、各source poolを一巡してから再利用する
+
+89成功episodeのseed 7で、同じ90 block placementsに対してcomponent ablationを行った。
+
+| Split | Source sampling | Epochs | Closed-loop |
+|---|---|---:|---:|
+| Random | Weighted replacement | 30 | 48/90（53.3%） |
+| Spatial | Weighted replacement | 30 | 27/90（30.0%） |
+| Random | Without replacement | 40 | 32/90（35.6%） |
+| Random | Minimal replacement | 30 | 32/90（35.6%） |
+| Spatial | Without replacement | 40 | 13/90（14.4%） |
+
+Without-replacementのepochはrandom splitで1,405 samples、spatial splitで1,470 samplesだったため、
+元の1,934 samples×30 epochsと総update量を揃える目的で40 epochsを使った。それでもtask-level
+performanceは回復しなかった。Spatial coverageだけではtrajectory diversityを表現できず、
+weighted replacementの重複は一部trajectoryを暗黙に強調していた可能性がある。
+
+したがって、これらは再現可能なablation optionとして保持するがrecommended training設定には
+しない。`outputs/phase4/chunked/bc_policy.pt`を引き続きbaselineとし、次はmultimodal action
+distributionを直接扱えるDiffusion Policyを比較対象として実装する。
+
 ## Current limitations
 
 - Dataset size is still small; the current goal is pipeline validation, not robust generalization.
@@ -277,3 +307,4 @@ source比率を保ちながらsample重複を抑えるdeterministic balanced sam
 - Failure conditions guide expert recollection, but policy-visited states are not yet relabeled as in full DAgger.
 - Source-balanced models vary by about 10 percentage points across the three tested training seeds.
 - Random episode splits and replacement replay sampling are the largest measured variance sources.
+- Naive spatial stratification and duplicate removal both reduced closed-loop performance in the seed-7 ablation.
