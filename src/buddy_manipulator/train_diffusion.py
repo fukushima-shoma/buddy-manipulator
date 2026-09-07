@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ema-decay", type=float, default=0.995)
     parser.add_argument("--failure-replay-fraction", type=float, default=0.2)
     parser.add_argument("--inference-seed", type=int, default=0)
+    parser.add_argument("--initial-noise-scale", type=float, default=1.0)
     parser.add_argument(
         "--device",
         default="auto",
@@ -216,6 +217,7 @@ def train(
     ema_decay: float = 0.995,
     failure_replay_fraction: float | None = 0.2,
     inference_seed: int = 0,
+    initial_noise_scale: float = 1.0,
     device_name: str = "auto",
     experiment_name: str = "diffusion-baseline",
     hypothesis: str = (
@@ -231,6 +233,8 @@ def train(
         raise ValueError("optimizer settings are invalid")
     if not 0.0 < ema_decay < 1.0:
         raise ValueError("ema_decay must be between zero and one")
+    if initial_noise_scale < 0.0:
+        raise ValueError("initial_noise_scale must be non-negative")
     split_seed = seed if split_seed is None else split_seed
     model_seed = seed if model_seed is None else model_seed
     sampler_seed = seed if sampler_seed is None else sampler_seed
@@ -296,6 +300,7 @@ def train(
         "condition_dim": condition_dim,
         "hidden_dim": hidden_dim,
         "residual_blocks": residual_blocks,
+        "prior_action_dim": 0,
     }
     model = DiffusionPolicy(**model_config).to(device)
     ema_model = copy.deepcopy(model).eval().requires_grad_(False)
@@ -401,6 +406,7 @@ def train(
         "sampler_seed": sampler_seed,
         "inference_seed": inference_seed,
         "inference_steps": inference_steps,
+        "initial_noise_scale": initial_noise_scale,
         "best_epoch": best_epoch,
         "validation_noise_mse": best_validation_loss,
         "sampled_validation_metrics": sampled_metrics,
@@ -428,6 +434,7 @@ def train(
             "sampler_seed": sampler_seed,
             "inference_steps": inference_steps,
             "inference_seed": inference_seed,
+            "initial_noise_scale": initial_noise_scale,
         },
         "best_epoch": best_epoch,
         "best_validation_noise_mse": best_validation_loss,
@@ -467,6 +474,7 @@ def main() -> None:
         ema_decay=args.ema_decay,
         failure_replay_fraction=args.failure_replay_fraction,
         inference_seed=args.inference_seed,
+        initial_noise_scale=args.initial_noise_scale,
         device_name=args.device,
         experiment_name=args.experiment_name,
         hypothesis=args.hypothesis,

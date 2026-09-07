@@ -36,6 +36,7 @@ buddy-rollout-bc = "buddy_manipulator.rollout_bc:main"
 buddy-teleop = "buddy_manipulator.teleop_demo:main"
 buddy-train-bc = "buddy_manipulator.train_bc:main"
 buddy-train-diffusion = "buddy_manipulator.train_diffusion:main"
+buddy-train-residual-diffusion = "buddy_manipulator.train_residual_diffusion:main"
 buddy-validate-dataset = "buddy_manipulator.validate_dataset:main"
 buddy-vision-demo = "buddy_manipulator.vision_demo:main"
 

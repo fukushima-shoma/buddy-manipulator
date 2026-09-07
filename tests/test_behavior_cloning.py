@@ -21,6 +21,7 @@ from buddy_manipulator.diffusion_policy import (
     DiffusionPolicyRunner,
     cosine_beta_schedule,
 )
+from buddy_manipulator.residual_diffusion import ResidualDiffusionRunner
 from buddy_manipulator.evaluate_bc import evaluate_checkpoint
 from buddy_manipulator.rollout_bc import load_policy_runner
 from buddy_manipulator.train_bc import (
@@ -30,6 +31,9 @@ from buddy_manipulator.train_bc import (
     train,
 )
 from buddy_manipulator.train_diffusion import train as train_diffusion
+from buddy_manipulator.train_residual_diffusion import (
+    train as train_residual_diffusion,
+)
 
 
 def write_episode(
@@ -392,6 +396,9 @@ def test_diffusion_training_writes_rollout_compatible_checkpoint(tmp_path) -> No
 
     runner = load_policy_runner(checkpoint_path, device_name="cpu")
     assert isinstance(runner, DiffusionPolicyRunner)
+    runner.configure_sampling(inference_steps=3, initial_noise_scale=0.0)
+    assert runner.inference_steps == 3
+    assert runner.initial_noise_scale == 0.0
     with np.load(dataset_dir / "episode_00000.npz") as arrays:
         runner.reset(11)
         first = runner.predict_chunk(
@@ -407,3 +414,48 @@ def test_diffusion_training_writes_rollout_compatible_checkpoint(tmp_path) -> No
         )
     assert first.shape == (3, 6)
     assert first == pytest.approx(second)
+
+
+def test_residual_diffusion_checkpoint_preserves_bc_prior_interface(tmp_path) -> None:
+    dataset_dir = tmp_path / "data"
+    base_dir = tmp_path / "base"
+    residual_dir = tmp_path / "residual"
+    write_episode(dataset_dir, 0, success=True, offset=0.0)
+    write_episode(dataset_dir, 1, success=True, offset=0.1)
+    base_checkpoint, _ = train(
+        dataset_dir,
+        base_dir,
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.5,
+        seed=3,
+        device_name="cpu",
+        action_horizon=3,
+    )
+    checkpoint_path, report = train_residual_diffusion(
+        dataset_dir,
+        base_checkpoint,
+        residual_dir,
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.5,
+        seed=3,
+        action_horizon=3,
+        diffusion_steps=4,
+        inference_steps=2,
+        failure_replay_fraction=None,
+        device_name="cpu",
+    )
+
+    runner = load_policy_runner(checkpoint_path, device_name="cpu")
+    assert isinstance(runner, ResidualDiffusionRunner)
+    assert report["status"] == "trained_pending_rollout"
+    runner.configure_sampling(residual_blend=0.0)
+    with np.load(dataset_dir / "episode_00000.npz") as arrays:
+        action = runner.predict_chunk(
+            arrays["rgb"][0],
+            arrays["depth"][0],
+            arrays["joint_position"][0],
+        )
+    assert action.shape == (3, 6)
+    assert np.all(np.isfinite(action))

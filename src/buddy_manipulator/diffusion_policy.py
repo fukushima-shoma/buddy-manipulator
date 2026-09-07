@@ -84,6 +84,7 @@ class DiffusionPolicy(nn.Module):
         condition_dim: int = 128,
         hidden_dim: int = 256,
         residual_blocks: int = 3,
+        prior_action_dim: int = 0,
     ) -> None:
         super().__init__()
         if action_horizon <= 0 or action_dim <= 0:
@@ -96,6 +97,7 @@ class DiffusionPolicy(nn.Module):
         self.condition_dim = condition_dim
         self.hidden_dim = hidden_dim
         self.residual_blocks = residual_blocks
+        self.prior_action_dim = prior_action_dim
         self.image_encoder = nn.Sequential(
             nn.Conv2d(image_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.SiLU(),
@@ -107,7 +109,10 @@ class DiffusionPolicy(nn.Module):
             nn.Flatten(),
         )
         self.condition_encoder = nn.Sequential(
-            nn.Linear(64 * 2 * 2 + state_dim, condition_dim),
+            nn.Linear(
+                64 * 2 * 2 + state_dim + prior_action_dim,
+                condition_dim,
+            ),
             nn.LayerNorm(condition_dim),
             nn.SiLU(),
         )
@@ -137,10 +142,21 @@ class DiffusionPolicy(nn.Module):
         self,
         observation: torch.Tensor,
         joint_position: torch.Tensor,
+        prior_action: torch.Tensor | None = None,
     ) -> torch.Tensor:
         image_features = self.image_encoder(observation)
+        features = [image_features, joint_position]
+        if self.prior_action_dim:
+            if prior_action is None:
+                raise ValueError("prior_action is required by this model")
+            flattened_prior = prior_action.flatten(start_dim=1)
+            if flattened_prior.shape[1] != self.prior_action_dim:
+                raise ValueError("prior_action has incompatible shape")
+            features.append(flattened_prior)
+        elif prior_action is not None:
+            raise ValueError("this model was not configured for a prior_action")
         return self.condition_encoder(
-            torch.cat([image_features, joint_position], dim=1)
+            torch.cat(features, dim=1)
         )
 
     def denoise(
@@ -169,11 +185,12 @@ class DiffusionPolicy(nn.Module):
         joint_position: torch.Tensor,
         noisy_action: torch.Tensor,
         timesteps: torch.Tensor,
+        prior_action: torch.Tensor | None = None,
     ) -> torch.Tensor:
         return self.denoise(
             noisy_action,
             timesteps,
-            self.encode_condition(observation, joint_position),
+            self.encode_condition(observation, joint_position, prior_action),
         )
 
     def add_noise(
@@ -194,13 +211,18 @@ class DiffusionPolicy(nn.Module):
         *,
         inference_steps: int = 10,
         clip_sample: float = 5.0,
+        prior_action: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Generate an action chunk with deterministic DDIM sampling."""
         if not 1 <= inference_steps <= self.diffusion_steps:
             raise ValueError("inference_steps must be within the diffusion schedule")
         if initial_noise.shape[1:] != (self.action_horizon, self.action_dim):
             raise ValueError("initial_noise has incompatible action shape")
-        condition = self.encode_condition(observation, joint_position)
+        condition = self.encode_condition(
+            observation,
+            joint_position,
+            prior_action,
+        )
         sample = initial_noise
         schedule = torch.linspace(
             self.diffusion_steps - 1,
@@ -242,6 +264,7 @@ class DiffusionPolicyRunner:
     device: torch.device
     inference_steps: int
     inference_seed: int
+    initial_noise_scale: float
     generator: torch.Generator
 
     @classmethod
@@ -271,6 +294,7 @@ class DiffusionPolicyRunner:
             condition_dim=int(config["condition_dim"]),
             hidden_dim=int(config["hidden_dim"]),
             residual_blocks=int(config["residual_blocks"]),
+            prior_action_dim=int(config.get("prior_action_dim", 0)),
         ).to(device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
@@ -283,6 +307,7 @@ class DiffusionPolicyRunner:
             device=device,
             inference_steps=int(checkpoint.get("inference_steps", 10)),
             inference_seed=inference_seed,
+            initial_noise_scale=float(checkpoint.get("initial_noise_scale", 1.0)),
             generator=torch.Generator().manual_seed(inference_seed),
         )
 
@@ -292,6 +317,21 @@ class DiffusionPolicyRunner:
 
     def reset(self, seed: int | None = None) -> None:
         self.generator.manual_seed(self.inference_seed if seed is None else seed)
+
+    def configure_sampling(
+        self,
+        *,
+        inference_steps: int | None = None,
+        initial_noise_scale: float | None = None,
+    ) -> None:
+        if inference_steps is not None:
+            if not 1 <= inference_steps <= self.model.diffusion_steps:
+                raise ValueError("inference_steps must be within the diffusion schedule")
+            self.inference_steps = inference_steps
+        if initial_noise_scale is not None:
+            if initial_noise_scale < 0.0:
+                raise ValueError("initial_noise_scale must be non-negative")
+            self.initial_noise_scale = initial_noise_scale
 
     def predict(self, rgb: np.ndarray, depth: np.ndarray, joint_position: np.ndarray) -> np.ndarray:
         return self.predict_chunk(rgb, depth, joint_position)[0]
@@ -314,7 +354,7 @@ class DiffusionPolicyRunner:
             (1, self.action_horizon, self.model.action_dim),
             generator=self.generator,
             dtype=torch.float32,
-        ).to(self.device)
+        ).mul_(self.initial_noise_scale).to(self.device)
         normalized_action = self.model.sample(
             observation_tensor,
             joint_tensor,

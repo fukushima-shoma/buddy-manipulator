@@ -44,6 +44,13 @@ def load_policy_runner(
             checkpoint_path,
             device_name=device_name,
         )
+    if policy_type == "residual_diffusion":
+        from buddy_manipulator.residual_diffusion import ResidualDiffusionRunner
+
+        return ResidualDiffusionRunner.from_checkpoint(
+            checkpoint_path,
+            device_name=device_name,
+        )
     raise ValueError(f"unsupported policy type: {policy_type}")
 
 
@@ -72,6 +79,24 @@ def parse_args() -> argparse.Namespace:
         "--device",
         default="auto",
         choices=("auto", "cpu", "mps", "cuda"),
+    )
+    parser.add_argument(
+        "--diffusion-inference-steps",
+        type=int,
+        default=None,
+        help="Override DDIM steps for diffusion checkpoints.",
+    )
+    parser.add_argument(
+        "--diffusion-noise-scale",
+        type=float,
+        default=None,
+        help="Scale initial diffusion noise; zero produces a deterministic mode-like sample.",
+    )
+    parser.add_argument(
+        "--residual-blend",
+        type=float,
+        default=None,
+        help="Override the BC-to-residual correction blend for residual diffusion.",
     )
     parser.add_argument(
         "--output",
@@ -155,6 +180,20 @@ def main() -> None:
         args.checkpoint,
         device_name=args.device,
     )
+    if (
+        args.diffusion_inference_steps is not None
+        or args.diffusion_noise_scale is not None
+    ):
+        if not hasattr(policy, "configure_sampling"):
+            raise ValueError("diffusion sampling overrides require a diffusion checkpoint")
+        policy.configure_sampling(
+            inference_steps=args.diffusion_inference_steps,
+            initial_noise_scale=args.diffusion_noise_scale,
+        )
+    if args.residual_blend is not None:
+        if not hasattr(policy, "residual_blend"):
+            raise ValueError("--residual-blend requires a residual diffusion checkpoint")
+        policy.configure_sampling(residual_blend=args.residual_blend)
     rng = random.Random(args.seed)
     episode_results = []
     print(f"policy device: {policy.device}", flush=True)
@@ -181,6 +220,9 @@ def main() -> None:
         "checkpoint": str(args.checkpoint),
         "device": str(policy.device),
         "policy_type": type(policy).__name__,
+        "diffusion_inference_steps": getattr(policy, "inference_steps", None),
+        "diffusion_noise_scale": getattr(policy, "initial_noise_scale", None),
+        "residual_blend": getattr(policy, "residual_blend", None),
         "seed": args.seed,
         "episode_count": args.episodes,
         "action_horizon": policy.action_horizon,
