@@ -258,6 +258,7 @@ def train(
         "validation_episodes": [path.name for path in validation_paths],
         "successful_only": successful_only,
         "failure_replay_fraction": failure_replay_fraction,
+        "seed": seed,
         "best_epoch": best_epoch,
         "validation_metrics": best_metrics,
     }
@@ -269,6 +270,7 @@ def train(
         "epochs": epochs,
         "action_horizon": action_horizon,
         "failure_replay_fraction": failure_replay_fraction,
+        "seed": seed,
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],

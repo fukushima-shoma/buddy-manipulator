@@ -198,10 +198,44 @@ samplingと同じに保つ。validation setにはweightを適用しない。
 `outputs/phase4/balanced/bc_policy.pt`だが、差が小さいため複数training seedとより多いtrialで
 再現性を確認するまでは、54-episode modelも比較baselineとして保持する。
 
+### Multi-seed robustness benchmark
+
+Training seedによるmodel varianceと、block配置によるevaluation varianceを同時に測るrunnerを
+用意した。各training seedのcheckpointを独立に作り、全modelを同じrollout seed・同じblock
+配置でbaselineとpaired比較する。中断後は同じ設定で`--reuse-existing`を付けると既存成果物を
+再利用できる。
+
+```bash
+./scripts/run_multiseed_benchmark.sh data/demonstrations \
+  --baseline outputs/phase4/chunked/bc_policy.pt \
+  --train-seeds 7,17,27 \
+  --rollout-seeds 404,505,606 \
+  --episodes 30 \
+  --epochs 30 \
+  --action-horizon 8 \
+  --failure-replay-fraction 0.2 \
+  --device mps \
+  --output-dir outputs/phase4/multiseed
+```
+
+上記3×3 experimentでは、baselineは3 rollout seedsで47/90（52.2%）だった。
+
+| Training seed | Balanced policy | Baselineとの差 |
+|---:|---:|---:|
+| 7 | 48/90（53.3%） | +1.1 points |
+| 17 | 56/90（62.2%） | +10.0 points |
+| 27 | 38/90（42.2%） | -10.0 points |
+
+Balanced policyのtraining-seed平均は52.6%、sample standard deviationは10.0 points、baseline
+との差の平均は+0.4 pointsだった。したがって、20% source balancingに安定した改善効果はまだ
+確認できない。Seed 17を評価結果から選ぶとtest-set selectionになるためrecommended modelへは
+昇格せず、引き続き54-episodeの`outputs/phase4/chunked/bc_policy.pt`をbaselineとして保持する。
+Aggregateと各paired resultは`outputs/phase4/multiseed/summary.json`に保存される。
+
 ## Current limitations
 
 - Dataset size is still small; the current goal is pipeline validation, not robust generalization.
 - Action chunks model a short future horizon but do not encode observation history.
 - Training images use one camera and one lighting configuration.
 - Failure conditions guide expert recollection, but policy-visited states are not yet relabeled as in full DAgger.
-- The source-balanced improvement is only one net success in 30 paired trials and is not yet statistically robust.
+- Source-balanced models vary by about 10 percentage points across the three tested training seeds.

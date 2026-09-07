@@ -184,6 +184,7 @@ def test_training_writes_reusable_checkpoint(tmp_path) -> None:
     assert saved_report["best_epoch"] == 1
     checkpoint = torch.load(checkpoint_path, weights_only=False)
     assert checkpoint["successful_only"] is True
+    assert checkpoint["seed"] == 3
     assert checkpoint["model_config"]["action_horizon"] == 3
 
     with np.load(dataset_dir / "episode_00000.npz") as arrays:
