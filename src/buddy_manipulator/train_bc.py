@@ -24,6 +24,7 @@ from buddy_manipulator.behavior_cloning import (
     denormalize_action,
     discover_episodes,
     load_episodes,
+    select_named_episodes,
     split_episodes,
     split_episodes_spatially,
 )
@@ -72,6 +73,27 @@ def parse_args() -> argparse.Namespace:
         "--use-object-features",
         action="store_true",
         help="Append a differentiable red-object RGB-D bottleneck to CNN features.",
+    )
+    parser.add_argument(
+        "--initialize-from",
+        type=Path,
+        default=None,
+        help="Initialize model weights from a compatible BC checkpoint.",
+    )
+    parser.add_argument(
+        "--preserve-checkpoint-split",
+        action="store_true",
+        help="Keep checkpoint splits and add unseen episodes to training.",
+    )
+    parser.add_argument(
+        "--reuse-checkpoint-normalization",
+        action="store_true",
+        help="Keep checkpoint normalization during continual fine-tuning.",
+    )
+    parser.add_argument(
+        "--freeze-image-encoder",
+        action="store_true",
+        help="Update only the action head during fine-tuning.",
     )
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "mps", "cuda"))
     parser.add_argument(
@@ -302,6 +324,10 @@ def train(
     spatial_bins: int = 3,
     source_sampling: str = "replacement",
     use_object_features: bool = False,
+    initialize_from: Path | None = None,
+    preserve_checkpoint_split: bool = False,
+    reuse_checkpoint_normalization: bool = False,
+    freeze_image_encoder: bool = False,
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -320,7 +346,27 @@ def train(
     torch.manual_seed(model_seed)
 
     paths = discover_episodes(dataset_dir, successful_only=successful_only)
-    if split_strategy == "random":
+    initialization_checkpoint = None
+    if initialize_from is not None:
+        initialization_checkpoint = torch.load(
+            initialize_from,
+            map_location="cpu",
+            weights_only=False,
+        )
+        if initialization_checkpoint.get("format_version") != 1:
+            raise ValueError("unsupported initialization checkpoint format")
+    if preserve_checkpoint_split:
+        if initialization_checkpoint is None:
+            raise ValueError("preserve_checkpoint_split requires initialize_from")
+        checkpoint_train = list(initialization_checkpoint["train_episodes"])
+        checkpoint_validation = list(
+            initialization_checkpoint["validation_episodes"]
+        )
+        known_names = set(checkpoint_train) | set(checkpoint_validation)
+        train_paths = select_named_episodes(paths, checkpoint_train)
+        train_paths.extend(path for path in paths if path.name not in known_names)
+        validation_paths = select_named_episodes(paths, checkpoint_validation)
+    elif split_strategy == "random":
         train_paths, validation_paths = split_episodes(
             paths, validation_fraction=validation_fraction, seed=split_seed
         )
@@ -335,7 +381,14 @@ def train(
         raise ValueError(f"unknown split strategy: {split_strategy}")
     train_episodes = load_episodes(train_paths)
     validation_episodes = load_episodes(validation_paths)
-    normalization = compute_normalization(train_episodes)
+    if reuse_checkpoint_normalization:
+        if initialization_checkpoint is None:
+            raise ValueError("reuse_checkpoint_normalization requires initialize_from")
+        normalization = NormalizationStats.from_dict(
+            initialization_checkpoint["normalization"]
+        )
+    else:
+        normalization = compute_normalization(train_episodes)
     train_dataset = BehaviorCloningDataset(
         train_episodes,
         normalization,
@@ -417,7 +470,25 @@ def train(
         action_horizon=action_horizon,
         use_object_features=use_object_features,
     ).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    if initialization_checkpoint is not None:
+        initial_config = initialization_checkpoint["model_config"]
+        compatible = (
+            int(initial_config.get("image_channels", 4)) == 4
+            and int(initial_config.get("state_dim", 6)) == 6
+            and int(initial_config.get("action_dim", 6)) == 6
+            and int(initial_config.get("action_horizon", 1)) == action_horizon
+            and bool(initial_config.get("use_object_features", False))
+            == use_object_features
+        )
+        if not compatible:
+            raise ValueError("initialization checkpoint model config is incompatible")
+        model.load_state_dict(initialization_checkpoint["model_state_dict"])
+    if freeze_image_encoder:
+        model.image_encoder.requires_grad_(False)
+    optimizer = torch.optim.Adam(
+        (parameter for parameter in model.parameters() if parameter.requires_grad),
+        lr=learning_rate,
+    )
     loss_function = nn.SmoothL1Loss()
     history = []
     best_state = None
@@ -434,6 +505,8 @@ def train(
     )
     for epoch in range(1, epochs + 1):
         model.train()
+        if freeze_image_encoder:
+            model.image_encoder.eval()
         loss_sum = 0.0
         sample_count = 0
         for batch in train_loader:
@@ -491,6 +564,10 @@ def train(
         "split_seed": split_seed,
         "model_seed": model_seed,
         "sampler_seed": sampler_seed,
+        "initialize_from": str(initialize_from) if initialize_from else None,
+        "preserve_checkpoint_split": preserve_checkpoint_split,
+        "reuse_checkpoint_normalization": reuse_checkpoint_normalization,
+        "freeze_image_encoder": freeze_image_encoder,
         "best_epoch": best_epoch,
         "validation_metrics": best_metrics,
     }
@@ -510,6 +587,10 @@ def train(
         "split_seed": split_seed,
         "model_seed": model_seed,
         "sampler_seed": sampler_seed,
+        "initialize_from": str(initialize_from) if initialize_from else None,
+        "preserve_checkpoint_split": preserve_checkpoint_split,
+        "reuse_checkpoint_normalization": reuse_checkpoint_normalization,
+        "freeze_image_encoder": freeze_image_encoder,
         "best_epoch": best_epoch,
         "train_episodes": checkpoint["train_episodes"],
         "validation_episodes": checkpoint["validation_episodes"],
@@ -543,6 +624,10 @@ def main() -> None:
         model_seed=args.model_seed,
         sampler_seed=args.sampler_seed,
         use_object_features=args.use_object_features,
+        initialize_from=args.initialize_from,
+        preserve_checkpoint_split=args.preserve_checkpoint_split,
+        reuse_checkpoint_normalization=args.reuse_checkpoint_normalization,
+        freeze_image_encoder=args.freeze_image_encoder,
     )
 
 

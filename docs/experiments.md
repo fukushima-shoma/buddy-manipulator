@@ -7,9 +7,9 @@ durable conclusions because generated artifacts are intentionally excluded from 
 ## Promotion rule
 
 A candidate is promoted only when paired closed-loop MuJoCo evaluation on unseen block positions
-shows a repeatable improvement over `outputs/phase4/chunked/bc_policy.pt`. Offline loss is diagnostic
-and cannot promote a model by itself. The standard robustness check uses training seeds 7, 17, and
-27 and rollout seeds 404, 505, and 606 with 30 positions per rollout seed.
+shows a repeatable improvement over the current recommended policy. Offline loss is diagnostic and
+cannot promote a model by itself. Consumed rollout seeds are never reused after their failed positions
+enter training data.
 
 ## Experiment history
 
@@ -21,10 +21,12 @@ and cannot promote a model by itself. The standard robustness check uses trainin
 | STAB-01 | Spatial splitting and fewer repeated frames reduce seed variance. | Spatial/source split plus deterministic samplers. | All variants regressed; best stabilization variant reached 32/90 versus 48/90. | Rejected; controls retained for ablation. |
 | DIFF-01 | Modeling a distribution over action chunks avoids harmful conditional means. | Conditional RGB-D DDPM with EMA and deterministic DDIM rollout. | 0/30 on rollout seed 404. | Rejected. |
 | DIFF-02 | The 10-step sampler amplifies high-noise prediction errors. | Compare more DDIM steps and reduced initial noise without retraining. | 25-step zero-noise sampling also produced 0/30. | Rejected. |
-| DIFF-03 | A proven BC prior can prevent visual-conditioning collapse while diffusion learns corrections. | Freeze the BC policy and diffuse only its normalized action residual. | Pending. | Pending. |
+| DIFF-03 | A proven BC prior can prevent visual-conditioning collapse while diffusion learns corrections. | Freeze the BC policy and diffuse only its normalized action residual. | Best variant reached 45/90 versus baseline 47/90. | Rejected. |
 | DATA-03 | Broader corrective coverage will improve weak workspace regions. | Add one expert trajectory at all 43 failures from rollout seeds 404/505/606, then cap replay at 20%. | 13/30 on fresh seed 707 versus baseline 16/30. | Rejected alone. |
-| VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Pending. | Pending. |
+| VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Single model reached 17/30 versus baseline 18/30. | Not promoted alone. |
 | ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | 65/90 versus baseline 57/90 on locked validation. | Provisionally promoted. |
+| DATA-04 | Expert corrections at ensemble boundary failures improve weak cells. | Add 36 successful corrections from seeds 1102-1405 and retrain from scratch. | 8/30 versus current ensemble 21/30 on seed 1506. | Rejected. |
+| FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Pending. | Pending. |
 
 ## DIFF-01 design decision
 
@@ -101,6 +103,20 @@ paired baseline run on the identical placements produced 17/30: four baseline fa
 two baseline successes regressed, and the net change was +2 (+6.7 points). Combined with the locked
 validation, the current evidence is 84/120 (70.0%) for the ensemble versus 74/120 (61.7%) for the old
 baseline. Seed 1405 is now considered consumed evaluation data and must not be used for training.
+
+## DATA-04 and FT-01 design decision
+
+The 36 ensemble failures from seeds 1102, 1203, 1304, and 1405 were converted into successful
+expert demonstrations, episodes 00134 through 00169. All passed dataset validation. These evaluation
+seeds are retired. Retraining the three object-centric members from scratch changed the episode split
+because the dataset grew; the resulting ensemble scored only 8/30 on fresh development seed 1506,
+versus 21/30 for the promoted ensemble. DATA-04 is rejected in this form.
+
+FT-01 isolates continual learning from split variance. It initializes each model from its promoted
+checkpoint, preserves that checkpoint's exact train/validation assignment and normalization, adds
+only previously unseen episodes to training, freezes the image encoder, and updates the action head
+at a lower learning rate. This treats the promoted model as prior knowledge instead of relearning the
+entire policy after every aggregation round.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-model-improvement.json`.

@@ -350,6 +350,48 @@ def test_source_sampling_strategy_requires_replay_fraction(tmp_path) -> None:
         )
 
 
+def test_continual_training_preserves_split_and_adds_new_episode(tmp_path) -> None:
+    dataset_dir = tmp_path / "data"
+    for index in range(4):
+        write_episode(dataset_dir, index, success=True, offset=index * 0.1)
+    base_checkpoint, base_report = train(
+        dataset_dir,
+        tmp_path / "base",
+        epochs=1,
+        batch_size=2,
+        validation_fraction=0.25,
+        seed=3,
+        device_name="cpu",
+        action_horizon=3,
+        use_object_features=True,
+    )
+    write_episode(dataset_dir, 4, success=True, offset=0.4)
+
+    checkpoint_path, report = train(
+        dataset_dir,
+        tmp_path / "continual",
+        epochs=1,
+        batch_size=2,
+        learning_rate=1e-4,
+        seed=5,
+        device_name="cpu",
+        action_horizon=3,
+        use_object_features=True,
+        initialize_from=base_checkpoint,
+        preserve_checkpoint_split=True,
+        reuse_checkpoint_normalization=True,
+        freeze_image_encoder=True,
+    )
+
+    assert report["validation_episodes"] == base_report["validation_episodes"]
+    assert set(base_report["train_episodes"]).issubset(report["train_episodes"])
+    assert "episode_00004" in report["train_episodes"]
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    assert checkpoint["preserve_checkpoint_split"] is True
+    assert checkpoint["reuse_checkpoint_normalization"] is True
+    assert checkpoint["freeze_image_encoder"] is True
+
+
 def test_diffusion_policy_shapes_schedule_and_sampling() -> None:
     policy = DiffusionPolicy(
         action_horizon=3,
