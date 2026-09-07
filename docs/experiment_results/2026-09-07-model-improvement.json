@@ -48,6 +48,22 @@
         "regressed_successes": 11,
         "success_rate_delta_points": 8.9
       },
+      "additional_confirmation": {
+        "rollout_seed": 1405,
+        "baseline_successes": 17,
+        "candidate_successes": 19,
+        "trials": 30,
+        "recovered_failures": 4,
+        "regressed_successes": 2,
+        "success_rate_delta_points": 6.7
+      },
+      "combined_unseen_evidence": {
+        "rollout_seeds": [1102, 1203, 1304, 1405],
+        "baseline_successes": 74,
+        "candidate_successes": 84,
+        "trials": 120,
+        "success_rate_delta_points": 8.3
+      },
       "decision": "provisionally promoted as current recommended policy"
     }
   ],

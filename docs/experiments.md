@@ -96,5 +96,11 @@ current recommended policy. The result is still provisional: 90 trials are enoug
 promotion, but not a strong statistical claim. Future changes must compare against this ensemble on
 new rollout seeds rather than reuse the locked validation set.
 
+An additional user-run confirmation on fresh seed 1405 produced 19/30 for the ensemble. A subsequent
+paired baseline run on the identical placements produced 17/30: four baseline failures were recovered,
+two baseline successes regressed, and the net change was +2 (+6.7 points). Combined with the locked
+validation, the current evidence is 84/120 (70.0%) for the ensemble versus 74/120 (61.7%) for the old
+baseline. Seed 1405 is now considered consumed evaluation data and must not be used for training.
+
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-model-improvement.json`.
