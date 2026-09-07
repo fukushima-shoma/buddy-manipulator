@@ -390,6 +390,7 @@ def test_continual_training_preserves_split_and_adds_new_episode(tmp_path) -> No
     assert checkpoint["preserve_checkpoint_split"] is True
     assert checkpoint["reuse_checkpoint_normalization"] is True
     assert checkpoint["freeze_image_encoder"] is True
+    assert report["history"][0]["epoch"] == 0
 
 
 def test_diffusion_policy_shapes_schedule_and_sampling() -> None:

@@ -496,6 +496,29 @@ def train(
     best_epoch = 0
     best_loss = float("inf")
 
+    if initialization_checkpoint is not None:
+        initial_metrics = evaluate_policy(
+            model,
+            validation_loader,
+            normalization,
+            device,
+        )
+        history.append(
+            {
+                "epoch": 0,
+                "train_loss": None,
+                **initial_metrics,
+            }
+        )
+        best_state = copy.deepcopy(model.state_dict())
+        best_metrics = initial_metrics
+        best_loss = initial_metrics["normalized_mse"]
+        print(
+            f"initial checkpoint: val_mse={best_loss:.5f} "
+            f"action_mae={initial_metrics['mean_action_mae']:.5f}",
+            flush=True,
+        )
+
     print(
         f"training on {device}: {len(train_paths)} episodes/"
         f"{len(train_dataset)} samples; validation {len(validation_paths)} episodes/"
