@@ -26,7 +26,7 @@ enter training data.
 | VISION-01 | Coarse average-pooled CNN features limit object localization. | Add image-derived red-object centroid, depth, and area features to the learned CNN representation. | Single model reached 17/30 versus baseline 18/30. | Not promoted alone. |
 | ENS-01 | Averaging independently initialized object-centric policies will reduce action variance. | Train model seeds 7/17/27 with fixed split and sampler, then average action chunks. | 65/90 versus baseline 57/90 on locked validation. | Provisionally promoted. |
 | DATA-04 | Expert corrections at ensemble boundary failures improve weak cells. | Add 36 successful corrections from seeds 1102-1405 and retrain from scratch. | 8/30 versus current ensemble 21/30 on seed 1506. | Rejected. |
-| FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Pending. | Pending. |
+| FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Fine-tuned ensemble scored 20/30 versus current 21/30; a 50/50 old/new blend scored 65/90 versus current 64/90 on untouched validation. | Not promoted; gain was too small. |
 
 ## DIFF-01 design decision
 
@@ -117,6 +117,23 @@ checkpoint, preserves that checkpoint's exact train/validation assignment and no
 only previously unseen episodes to training, freezes the image encoder, and updates the action head
 at a lower learning rate. This treats the promoted model as prior knowledge instead of relearning the
 entire policy after every aggregation round.
+
+All three fine-tuned members improved their held-out normalized MSE, but their ensemble reached only
+20/30 on development seed 1506, compared with 21/30 for the promoted ensemble. Validation loss again
+proved insufficient as a promotion metric. A prespecified equal blend of the three promoted and three
+fine-tuned members reached 22/30 on seed 1506, so that lower-risk variant advanced to untouched seeds.
+
+| Rollout seed | Current ensemble | 50/50 old/new blend | Recovered | Regressed |
+|---:|---:|---:|---:|---:|
+| 1607 | 21/30 | 21/30 | 2 | 2 |
+| 1708 | 25/30 | 25/30 | 0 | 0 |
+| 1809 | 18/30 | 19/30 | 2 | 1 |
+| **Total** | **64/90 (71.1%)** | **65/90 (72.2%)** | **4** | **3** |
+
+The blend improved by one success (+1.1 points), which is not a repeatable or material gain under the
+promotion rule. FT-01 and the blend are therefore retained as research artifacts but not promoted.
+The current three-model object-centric ensemble remains the recommended policy. The next iteration
+should target the remaining boundary failure mechanism directly rather than tune this result further.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-07-model-improvement.json`.

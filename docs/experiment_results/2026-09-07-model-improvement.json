@@ -65,8 +65,49 @@
         "success_rate_delta_points": 8.3
       },
       "decision": "provisionally promoted as current recommended policy"
+    },
+    {
+      "id": "DATA-04",
+      "hypothesis": "Expert corrections at current-ensemble failures improve boundary coverage.",
+      "dataset_change": "36 successful expert episodes, episode_00134 through episode_00169, collected from failures on seeds 1102 through 1405",
+      "development": {
+        "rollout_seed": 1506,
+        "current_successes": 21,
+        "candidate_successes": 8,
+        "trials": 30
+      },
+      "decision": "rejected; dataset growth changed the random split and caused catastrophic regression"
+    },
+    {
+      "id": "FT-01",
+      "hypothesis": "Preserving the promoted split, normalization, and visual representation avoids forgetting while learning corrections.",
+      "training": {
+        "model_seeds": [7, 17, 27],
+        "epochs": 10,
+        "learning_rate": 0.0001,
+        "frozen_image_encoder": true,
+        "preserved_checkpoint_split": true,
+        "reused_checkpoint_normalization": true
+      },
+      "development": {
+        "rollout_seed": 1506,
+        "current_successes": 21,
+        "fine_tuned_successes": 20,
+        "old_new_blend_successes": 22,
+        "trials": 30
+      },
+      "untouched_validation": {
+        "rollout_seeds": [1607, 1708, 1809],
+        "current_successes": 64,
+        "old_new_blend_successes": 65,
+        "trials": 90,
+        "recovered_failures": 4,
+        "regressed_successes": 3,
+        "success_rate_delta_points": 1.1
+      },
+      "decision": "not promoted; the one-success gain was not material or repeatable"
     }
   ],
-  "data_leakage_control": "Seeds 404, 505, and 606 were retired from final evaluation after their failures were added to training. ENS-01 validation used untouched seeds 1102, 1203, and 1304.",
-  "recommended_command": "./scripts/run_recommended_policy.sh --episodes 30 --seed 1405 --headless"
+  "data_leakage_control": "Seeds 404, 505, 606, 1102, 1203, 1304, and 1405 are retired after their failures entered training. Seed 1506 was consumed for development screening. FT-01 validation used untouched seeds 1607, 1708, and 1809.",
+  "recommended_command": "./scripts/run_recommended_policy.sh --episodes 30 --seed 1901 --headless"
 }
