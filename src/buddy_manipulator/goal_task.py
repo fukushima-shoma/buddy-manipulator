@@ -257,6 +257,13 @@ def _body_position(model: Any, data: Any, body_name: str) -> np.ndarray:
     return np.asarray(data.xpos[body_id], dtype=np.float64).copy()
 
 
+def object_position(model: Any, data: Any, object_color: str) -> np.ndarray:
+    """Return one object position for simulation-only evaluation."""
+    if object_color not in OBJECT_BODIES:
+        raise ValueError(f"unsupported object color: {object_color}")
+    return _body_position(model, data, OBJECT_BODIES[object_color])
+
+
 def evaluate_goal_task(
     model: Any,
     data: Any,

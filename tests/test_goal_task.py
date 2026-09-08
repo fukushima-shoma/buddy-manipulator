@@ -10,6 +10,7 @@ from buddy_manipulator.goal_task import (
     apply_object_positions,
     detect_goal_object,
     execute_pick_and_place,
+    object_position,
     sample_object_positions,
 )
 from buddy_manipulator.kinematics import JointAngles
@@ -59,3 +60,11 @@ def test_goal_expert_places_selected_object(goal, positions) -> None:
     assert result.selected_object_in_target
     assert not result.distractor_in_target
     assert result.placement_error_m <= 0.05
+
+
+def test_object_position_rejects_unknown_color() -> None:
+    model, data = load_model()
+
+    assert object_position(model, data, "red").shape == (3,)
+    with pytest.raises(ValueError, match="unsupported object color"):
+        object_position(model, data, "blue")

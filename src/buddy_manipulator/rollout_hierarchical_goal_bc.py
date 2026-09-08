@@ -15,6 +15,7 @@ from buddy_manipulator.goal_task import (
     apply_object_positions,
     sample_object_positions,
 )
+from buddy_manipulator.grasp_pose_residual import GraspPoseResidualRunner
 from buddy_manipulator.hierarchical_goal_policy import (
     run_expert_grasp_then_place_policy,
     run_hierarchical_goal_policy,
@@ -36,10 +37,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=3025)
     parser.add_argument(
         "--grasp-controller",
-        choices=("learned", "expert"),
+        choices=("learned", "expert", "residual"),
         default="learned",
         help="Use learned grasp or an RGB-D/IK diagnostic upper bound.",
     )
+    parser.add_argument(
+        "--grasp-residual-checkpoint",
+        type=Path,
+        default=None,
+    )
+    parser.add_argument("--grasp-residual-blend", type=float, default=None)
     parser.add_argument(
         "--transition",
         choices=("observable", "oracle"),
@@ -70,6 +77,15 @@ def main() -> None:
     place_policy = BehaviorCloningRunner.from_checkpoint(
         args.place_checkpoint, device_name=args.device
     )
+    grasp_pose_policy = None
+    if args.grasp_controller == "residual":
+        if args.grasp_residual_checkpoint is None:
+            raise ValueError("residual grasp requires --grasp-residual-checkpoint")
+        grasp_pose_policy = GraspPoseResidualRunner.from_checkpoint(
+            args.grasp_residual_checkpoint,
+            device_name=args.device,
+            blend=args.grasp_residual_blend,
+        )
     if grasp_policy.model.goal_dim != 4 or place_policy.model.goal_dim != 4:
         raise ValueError("both checkpoints must use four-value manipulation goals")
 
@@ -90,13 +106,14 @@ def main() -> None:
         grasp_policy.reset(args.seed * 100_000 + index)
         place_policy.reset(args.seed * 100_000 + index)
         with RgbdCamera(model, width=args.width, height=args.height) as camera:
-            if args.grasp_controller == "expert":
+            if args.grasp_controller in ("expert", "residual"):
                 result = run_expert_grasp_then_place_policy(
                     model,
                     data,
                     place_policy,
                     camera,
                     goal,
+                    grasp_pose_policy=grasp_pose_policy,
                     control_hz=args.control_hz,
                     max_seconds=args.max_seconds,
                 )
@@ -152,8 +169,18 @@ def main() -> None:
         "device": str(grasp_policy.device),
         "seed": args.seed,
         "grasp_controller": args.grasp_controller,
+        "grasp_residual_checkpoint": (
+            str(args.grasp_residual_checkpoint)
+            if args.grasp_residual_checkpoint is not None
+            else None
+        ),
+        "grasp_residual_blend": (
+            grasp_pose_policy.blend if grasp_pose_policy is not None else None
+        ),
         "transition_mode": (
-            "expert_grasp" if args.grasp_controller == "expert" else args.transition
+            f"{args.grasp_controller}_grasp"
+            if args.grasp_controller in ("expert", "residual")
+            else args.transition
         ),
         "fixed_goal": args.goal.to_dict() if args.goal else None,
         "episode_count": args.episodes,

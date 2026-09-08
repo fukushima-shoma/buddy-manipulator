@@ -249,3 +249,35 @@ RGB-D/IK acquisition controller instead of continuing direct joint-action BC.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5f-hierarchical-skills.json`.
+
+## Phase 5G: bounded grasp-pose residual
+
+Phase 5G tests a structured alternative to failed absolute-joint grasp BC. The analytical RGB-D pose
+is retained as a prior, and a zero-initialized MLP predicts a bounded XYZ correction from pose,
+image centroid, mask area, and selected object color. The target is the recorded object-top pose,
+with purple-to-yellow held out. This changes what the model learns from an entire trajectory to a
+single object-relative decision while keeping IK and safe keyframes deterministic.
+
+Offline held-out mean pose error improved from 1.811 mm to 1.646 mm, but this did not improve grasp
+robustness. Paired grasp-only rollout scored 40/40 for the unmodified RGB-D/IK baseline, 34/40 for a
+full residual, and 38/40 at 25% blend. In two full-task paired sets, the 25% blend scored 45/80 versus
+44/80, with four recoveries and three regressions. The residual is therefore not promoted.
+
+The important finding is objective mismatch: object-center geometry is not an adequate supervision
+target for a narrow, contact-sensitive grasp. The next experiment should collect controlled XY/Z
+pose perturbations and learn from lift success, contact stability, and margin, while adding camera
+calibration or domain variation so the already-perfect in-distribution analytical baseline has
+meaningful failure cases.
+
+```bash
+./scripts/run_grasp_pose_training.sh data/goal_demonstrations \
+  --output-dir outputs/phase5/grasp_pose_residual/seed7 \
+  --epochs 200 --blend 0.25
+
+./scripts/run_grasp_pose_rollout.sh \
+  outputs/phase5/grasp_pose_residual/seed7/grasp_pose_residual.pt \
+  --controller residual --blend 0.25 --episodes 40 --seed 3631
+```
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5g-grasp-pose-residual.json`.

@@ -1,0 +1,59 @@
+{
+  "date": "2026-09-08",
+  "phase": "5G",
+  "objective": "replace failed direct grasp-action BC with a bounded object-relative pose residual around RGB-D and IK",
+  "model": {
+    "type": "zero-initialized MLP",
+    "input": "analytical XYZ, normalized image centroid, mask area, object one-hot",
+    "output": "XYZ correction in millimeters",
+    "maximum_correction_m": [0.015, 0.015, 0.015],
+    "safe_blend": 0.25
+  },
+  "protocol": {
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "holdout_goal": ["purple", "yellow"],
+    "seed": 7,
+    "epochs": 200,
+    "best_epoch": 99
+  },
+  "offline_heldout": {
+    "baseline_mean_error_mm": 1.811,
+    "baseline_max_error_mm": 2.836,
+    "corrected_mean_error_mm": 1.646,
+    "corrected_max_error_mm": 3.544,
+    "corrected_axis_mae_mm": [1.117, 1.095, 0.005]
+  },
+  "paired_grasp_rollout": {
+    "seed": 3631,
+    "episodes": 40,
+    "baseline": 40,
+    "full_residual": 34,
+    "quarter_residual": 38
+  },
+  "paired_full_task": {
+    "seed_3530": {
+      "baseline": 24,
+      "quarter_residual": 25,
+      "recovered": 2,
+      "regressed": 1
+    },
+    "seed_3732": {
+      "baseline": 20,
+      "quarter_residual": 20,
+      "recovered": 2,
+      "regressed": 2
+    },
+    "total": {
+      "baseline": 44,
+      "quarter_residual": 45,
+      "episodes": 80,
+      "recovered": 4,
+      "regressed": 3
+    }
+  },
+  "finding": "lower geometric center error did not improve contact-stable grasping; submillimeter positive Y changes could cause failures",
+  "decision": "reject the learned residual as a controller, retain bounded residual and grasp-only evaluation infrastructure, and collect on-policy perturbations labeled by lift and contact outcome"
+}

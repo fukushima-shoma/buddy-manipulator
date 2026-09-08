@@ -28,6 +28,7 @@ enter training data.
 | DATA-04 | Expert corrections at ensemble boundary failures improve weak cells. | Add 36 successful corrections from seeds 1102-1405 and retrain from scratch. | 8/30 versus current ensemble 21/30 on seed 1506. | Rejected. |
 | FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Fine-tuned ensemble scored 20/30 versus current 21/30; a 50/50 old/new blend scored 65/90 versus current 64/90 on untouched validation. | Not promoted; gain was too small. |
 | HYBRID-01 | A calibrated model-based fallback can cover regions where learned behavior is unreliable. | Route the outer 1 cm workspace band to an RGB-D/IK expert and retain the learned ensemble in the center. | 86/90 versus current 66/90 on locked unseen placements; 20 recoveries and 0 regressions. | Promoted as recommended system policy. |
+| POSE-01 | A learned metric-pose residual can preserve IK structure while correcting RGB-D bias. | Predict a bounded XYZ correction from analytical pose features. | Held-out mean error improved by 0.165 mm, but grasp success fell from 40/40 to 34/40 at full blend and 38/40 at 25%. | Rejected; tooling retained. |
 
 ## DIFF-01 design decision
 
@@ -249,3 +250,30 @@ the analytical acquisition controller rather than regress absolute joint traject
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5f-hierarchical-skills.json`.
+
+## Phase 5G grasp-pose residual decision
+
+Direct joint-action grasp BC failed to reach the Phase 5F lift gate, so POSE-01 moved learning to a
+structured interface. A zero-initialized MLP receives the analytical RGB-D XYZ pose, normalized
+image centroid, mask area, and object identity, then predicts a correction in millimeters. Runtime
+corrections are clipped to 15 mm per axis and blended with the analytical pose. Labels use the
+recorded object-top position; purple-to-yellow remains test-only.
+
+The model reduced held-out mean pose error from 1.811 mm to 1.646 mm, but increased held-out
+worst-case error from 2.836 mm to 3.544 mm. That mismatch mattered: on identical seed-3631 grasp
+scenes, the RGB-D/IK
+baseline scored 40/40, full residual scored 34/40, and a 25% safety blend scored 38/40. Positive Y
+corrections of less than 1 mm were enough to lose two grasps, showing that geometric center error is
+not the same objective as contact-stable acquisition.
+
+In full-task paired evaluation, the 25% blend scored 25/40 versus 24/40 on seed 3530, then tied 20/40
+on fresh seed 3732. Across 80 trials it recovered four baseline failures but regressed three baseline
+successes, for 45/80 versus 44/80. The one-point net gain is not material or repeatable enough for
+promotion. POSE-01 is rejected as a controller but its bounded residual model, grasp-only evaluator,
+and hierarchical integration are retained. The next data should come from on-policy pose
+perturbations labeled by grasp outcome, not geometric object-center supervision. Because the current
+analytical grasp already reached 40/40 in-distribution, harder calibration/domain variation is also
+needed to create honest improvement headroom.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5g-grasp-pose-residual.json`.

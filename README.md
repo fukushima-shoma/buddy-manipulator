@@ -249,7 +249,13 @@ Phase 5Fではmonolithic BCをgraspとtransport/placeへ分割した。Goalもob
 target-only placeへfactorizeし、RGB-D liftとfinger stateによるobservable handoffを追加した。
 Learned graspは0/8でgateを通過できなかったが、RGB-D/IK graspでplace skillを隔離した
 locked benchmarkは24/40（60%）まで改善した。これはdiagnostic hybridであり、完全学習policy
-としては未昇格。次はabsolute joint BCではなくobject-relative grasp pose/residualを学習する。
+としては未昇格。
+
+Phase 5GではRGB-D/IK poseにzero-initialized MLPのbounded XYZ residualを加えた。Held-out
+pose errorは1.811 mmから1.646 mmへ改善したが、paired graspはbaseline 40/40に対して
+full residual 34/40、25% blend 38/40だった。Full-task二組では45/80対44/80と僅差で、
+4 recoveriesに対して3 regressionsが出たためpromoteしていない。次はgeometric centerではなく
+on-policy pose perturbationのlift/contact outcomeを教師にする。
 
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \

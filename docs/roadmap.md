@@ -31,7 +31,9 @@ phase conditioningを評価した。Phase 5DではGRU historyとmodel-seed ensem
 target geometryが次のbottleneckだと特定した。Phase 5Eのtarget-conditioning ablationsは
 closed-loop改善に失敗した。Phase 5Fではgraspとtransport/placeを分離し、expert graspで
 place skillを隔離すると24/40まで改善した。一方、learned graspからのobservable handoffは
-0/8だったため、次はRGB-D/IKを基準にobject-relative grasp poseまたはresidualを学習する。
+0/8だった。Phase 5Gのbounded pose residualはoffline誤差を改善したがgrasp rolloutを
+40/40から38/40へ悪化させたためrejectした。次はpose perturbationを収集し、geometric center
+ではなくlift/contact outcomeからgrasp success criticまたはresidualを学習する。
 
 ## Phase 6: 実機移行
 

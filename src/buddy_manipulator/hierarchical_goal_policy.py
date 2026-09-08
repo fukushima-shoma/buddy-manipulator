@@ -120,13 +120,19 @@ def run_expert_grasp_then_place_policy(
     camera: Any,
     goal: ManipulationGoal,
     *,
+    grasp_pose_policy: Any | None = None,
     control_hz: float = 5.0,
     max_seconds: float = 18.0,
 ) -> HierarchicalGoalPolicyResult:
     """Measure the learned place skill behind a deterministic RGB-D/IK grasp."""
     if control_hz <= 0 or max_seconds <= 5.9:
         raise ValueError("max seconds must leave time after the expert grasp")
-    detection = detect_goal_object(camera.capture(data), goal)
+    initial_frame = camera.capture(data)
+    detection = (
+        grasp_pose_policy.predict_detection(initial_frame, goal)
+        if grasp_pose_policy is not None
+        else detect_goal_object(initial_frame, goal)
+    )
     joint_history = [controlled_joint_positions(model, data)]
     next_sample_time = [float(data.time) + 1.0 / control_hz]
 
@@ -173,7 +179,9 @@ def run_expert_grasp_then_place_policy(
         distractor_in_target=place_result.distractor_in_target,
         transitioned=True,
         transition_step=expert_steps,
-        transition_mode="expert_grasp",
+        transition_mode=(
+            "residual_grasp" if grasp_pose_policy is not None else "expert_grasp"
+        ),
         max_detected_object_height_m=post_grasp_height,
         trace=trace,
     )
