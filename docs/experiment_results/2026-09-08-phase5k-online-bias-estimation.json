@@ -1,0 +1,30 @@
+{
+  "experiment_id": "BIAS-EST-01",
+  "phase": "5K",
+  "date": "2026-09-08",
+  "hypothesis": "A persistent placement execution bias can be inferred from prior RGB-D outcomes without exposing the injected bias.",
+  "estimator": {
+    "initial_estimate_xy_mm": [0.0, 0.0],
+    "smoothing": 0.5,
+    "maximum_bias_mm": 100.0,
+    "measurement": "1000 * (observed object XY - calibrated target XY) - selected command XY",
+    "observation_source": "post-placement RGB-D detection"
+  },
+  "paired_rollout": {
+    "condition": "hidden -55 mm X release bias",
+    "seed": 4843,
+    "episodes": 40,
+    "baseline_successes": 37,
+    "online_critic_successes": 40,
+    "recoveries": 3,
+    "regressions": 0,
+    "bias_observations": 40,
+    "final_bias_estimate_xy_mm": [-41.622831106191356, 3.69801324774489]
+  },
+  "decision": {
+    "status": "accepted for persistent placement calibration offsets",
+    "reason": "The online system recovered all paired baseline failures while receiving no injected-bias value.",
+    "limitation": "The benchmark uses one persistent bias; abrupt or per-episode bias changes are not yet covered.",
+    "next": "Measure the hierarchy under randomized physics, appearance, and calibration conditions."
+  }
+}

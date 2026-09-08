@@ -287,6 +287,20 @@ placement success criticを追加した。540 attemptsで学習し、通常条�
 regressionはなかった。Phase 5のrecommended systemはgrasp critic + placement critic + IK skillsの
 structured hierarchyとなる。
 
+Phase 5K removes the known-bias assumption. After each placement, an online estimator compares the
+RGB-D observed object position with the calibrated target and subtracts the selected correction
+command. On 40 fresh scenes with a hidden −55 mm X offset, the uncorrected baseline reached 37/40,
+while online estimation and critic ranking reached 40/40. The estimate starts at zero and uses only
+prior outcomes; no simulator object coordinates or injected-bias value are exposed to the policy.
+
+```bash
+./scripts/run_structured_goal_policy.sh \
+  outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
+  outputs/phase5/placement_success_critic/seed23/placement_success_critic.pt \
+  --episodes 40 --seed 4843 --place-bias-x-mm -55 \
+  --bias-knowledge online
+```
+
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \
   outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \

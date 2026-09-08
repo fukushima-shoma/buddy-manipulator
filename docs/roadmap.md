@@ -39,7 +39,9 @@ lift outcomeからgrasp success criticを学習した。Fresh graspを通常条�
 9/20から7/20、matched/grounded BCは両方0/20となりrejectした。次はabsolute action trajectoryを
 再学習せず、analytical placementをpriorとしてrelease pose候補を実際のtask outcomeでrankingした。
 Phase 5Jは通常40/40を維持し、−55 mm X biasを34/40から40/40へ改善した。次はbiasを既知として
-与えず、camera observationからonline推定する。
+与えず、camera observationからonline推定した。Phase 5Kはhidden −55 mm X biasでbaseline
+37/40に対して40/40を達成し、persistent calibration offsetへの適応を確認した。次はphysics、
+appearance、calibrationをrandomizeしたstress benchmarkでfailure envelopeを測る。
 
 ## Phase 6: 実機移行
 

@@ -32,6 +32,7 @@ enter training data.
 | GRASP-CRITIC-01 | Actual lift outcomes can identify contact-stable residuals better than geometric-center labels. | Train a candidate-ranking critic on 780 perturbed grasps with an analytical fallback margin. | Two fresh normal seeds improved 75/80 to 80/80; known +6 mm Y-bias improved 34/40 to 40/40; full task tied 26/40. | Accepted for grasp acquisition; end-to-end policy unchanged. |
 | HANDOFF-01 | Canonicalizing the post-grasp state will make learned placement more stable. | Add a fixed closed-gripper handoff pose; test inference-only use, matched retraining, and explicit object/target grounding. | XY variation fell sharply, but inference-only scored 7/20 versus 9/20 and both matched BC variants scored 0/20 versus 11/20. | Rejected as a policy; instrumentation retained. |
 | PLACE-CRITIC-01 | Placement outcomes can supervise a bounded release decision more reliably than absolute-action BC. | Rank XY release residuals around deterministic IK transport with an analytical fallback. | Normal stayed 40/40; controlled −55 mm X-bias improved 34/40 to 40/40 with six recoveries and no regressions. | Accepted as the Phase 5 placement component. |
+| BIAS-EST-01 | Persistent release bias can be estimated from prior observable placement outcomes. | Subtract selected commands from RGB-D object-to-target errors and rank candidates with the online estimate. | Hidden −55 mm X-bias improved from 37/40 to 40/40 on paired fresh scenes; final estimate was (−41.6, 3.7) mm. | Accepted for persistent calibration offsets. |
 
 ## DIFF-01 design decision
 
@@ -344,3 +345,23 @@ it as an evaluation parameter.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5j-placement-success-critic.json`.
+
+## Phase 5K online-bias decision
+
+BIAS-EST-01 starts with no execution-bias knowledge and updates only after observing a completed
+placement through the same RGB-D interface used for object localization. The estimator removes the
+known candidate command from measured object-to-target displacement, clips implausible values, and
+smooths repeated measurements before the placement critic ranks the next episode's outcomes.
+
+On paired seed 4843 with a hidden −55 mm X release offset, the no-correction baseline reached 37/40
+and the online system reached 40/40. All 40 final objects were observable, including the first episode
+that ran with a zero estimate. The final estimate was `(−41.6, 3.7) mm`; exact identification is not
+required because the observable measurement includes placement dynamics as well as the injected
+offset. No baseline success regressed.
+
+The estimator is promoted for persistent offsets, but not for per-episode disturbances. Phase 5L will
+stress the hierarchy under randomized physics, appearance, and calibration conditions and report the
+remaining failure envelope rather than tune against a single nominal scene.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5k-online-bias-estimation.json`.

@@ -396,3 +396,25 @@ model-based system, not an end-to-end neural controller.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5j-placement-success-critic.json`.
+
+## Phase 5K: online placement-bias estimation
+
+Phase 5K removes the strongest assumption in the Phase 5J stress test: the controller is no longer
+given the injected execution bias. An observable online estimator starts at `(0, 0) mm`. After each
+placement it detects the selected object in RGB-D, measures object-to-target displacement, subtracts
+the correction command that was sent, clips the estimate to ±100 mm, and applies an exponential
+moving average. The placement critic ranks predicted outcomes formed from that estimate plus bounded
+candidate commands.
+
+On fresh seed 4843 with a hidden −55 mm X release offset, the uncorrected structured baseline reached
+37/40. The online estimator and placement critic reached 40/40, recovering all three baseline failures.
+The first episode deliberately used the zero estimate; after 40 observable outcomes the estimate was
+`(−41.6, 3.7) mm`. It need not identify the simulator injection exactly because release dynamics and
+object settling are included in the measured outcome; its operational goal is successful correction.
+
+BIAS-EST-01 is accepted for persistent calibration offsets. The result does not establish adaptation
+to bias that changes every episode, and the estimator must be reset or revalidated after major camera,
+tool, or target-frame changes.
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5k-online-bias-estimation.json`.
