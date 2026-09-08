@@ -440,3 +440,23 @@ grasp robustness under low-friction/high-mass combinations a remaining limit.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5l-domain-randomization.json`.
+
+## Phase 5M: bilingual language grounding
+
+Phase 5M replaces direct `object_color` and `target_color` arguments with an instruction boundary.
+The `GoalGrounder` protocol separates language interpretation from manipulation, and the first
+`LexiconGoalGrounder` implementation recognizes bounded English/Japanese aliases for red/purple
+objects and green/yellow targets. It returns evidence and a confidence value with the grounded goal.
+
+Safety behavior is conservative: empty commands, missing colors, unsupported colors, or multiple
+supported object/target colors raise `GroundingError` before the simulator or future hardware moves.
+Nine unit cases cover bilingual mappings, Unicode normalization, missing fields, and ambiguity.
+
+Four end-to-end commands covered every structured goal on independent seeds. Red-to-green,
+purple-to-green, red-to-yellow, and purple-to-yellow each reached 4/4, for 16/16 total. LANG-01 is
+accepted as the Phase 5 command interface. It is not a VLM and does not support open vocabulary,
+spatial relations such as "the left block," or free-form dialogue. Those capabilities can be added
+behind the same protocol and compared against this deterministic safety baseline.
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5m-language-grounding.json`.

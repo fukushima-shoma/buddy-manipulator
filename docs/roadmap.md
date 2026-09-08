@@ -44,6 +44,10 @@ Phase 5Jは通常40/40を維持し、−55 mm X biasを34/40から40/40へ改善
 appearance、calibrationをrandomizeしたstress benchmarkでfailure envelopeを測った。Phase 5Lの
 randomized-trained placement criticはfresh stress 2 seedsを108/160から119/160へ改善し、nominal
 40/40も維持した。次はnatural-language instructionをstructured goalへgroundingする。
+Phase 5MではEnglish/Japanese commandを安全にgroundingするinterfaceを追加し、4 goals合計16/16を
+確認した。曖昧なcommandはmotion前にrejectする。Current implementationはbounded lexicon baselineで、
+open-vocabulary VLMは同じinterface上で評価するfuture researchとなる。Simulation-first Phase 5の
+reproducible baselineはここで完了し、次のmajor phaseは実機移行である。
 
 ## Phase 6: 実機移行
 

@@ -315,6 +315,20 @@ of aborting the run.
   --bias-knowledge online
 ```
 
+Phase 5M adds a conservative bilingual language-grounding boundary. English and Japanese commands
+are mapped to one of the four structured goals; missing or ambiguous object/target colors stop before
+motion. Four commands covering every goal completed 16/16 end-to-end nominal tasks. The implementation
+exposes a `GoalGrounder` protocol for a later VLM adapter, but the current result is a deterministic
+lexicon baseline rather than a claim of open-vocabulary understanding.
+
+```bash
+./scripts/run_language_goal_policy.sh \
+  outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
+  outputs/phase5/domain_randomization/placement_critic_seed31/placement_success_critic.pt \
+  "紫のブロックを黄色のエリアに置いて" \
+  --episodes 4 --seed 5452
+```
+
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \
   outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \

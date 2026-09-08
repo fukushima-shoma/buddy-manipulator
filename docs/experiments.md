@@ -34,6 +34,7 @@ enter training data.
 | PLACE-CRITIC-01 | Placement outcomes can supervise a bounded release decision more reliably than absolute-action BC. | Rank XY release residuals around deterministic IK transport with an analytical fallback. | Normal stayed 40/40; controlled −55 mm X-bias improved 34/40 to 40/40 with six recoveries and no regressions. | Accepted as the Phase 5 placement component. |
 | BIAS-EST-01 | Persistent release bias can be estimated from prior observable placement outcomes. | Subtract selected commands from RGB-D object-to-target errors and rank candidates with the online estimate. | Hidden −55 mm X-bias improved from 37/40 to 40/40 on paired fresh scenes; final estimate was (−41.6, 3.7) mm. | Accepted for persistent calibration offsets. |
 | ROBUST-01 | Training the release critic across dynamics and appearance variation improves combined-shift robustness. | Collect 720 randomized outcomes and retrain the candidate ranker; add safe failure containment and observable re-grasp. | Two fresh stress seeds improved from 108/160 to 119/160; nominal remained 40/40. | Accepted as the robust placement critic. |
+| LANG-01 | A conservative bilingual grounding boundary can safely connect natural-language commands to the structured hierarchy. | Map bounded English/Japanese aliases into one unique goal and reject ambiguity before motion. | All four goals completed 4/4 each (16/16 total); nine grounding tests passed. | Accepted as the Phase 5 language interface, not as a VLM result. |
 
 ## DIFF-01 design decision
 
@@ -394,3 +395,19 @@ must include dynamics variation rather than infer release policy changes can rep
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5l-domain-randomization.json`.
+
+## Phase 5M language-grounding decision
+
+LANG-01 defines a narrow interface before adding a foundation model. A grounder must return one
+structured goal plus evidence and confidence, or raise an error before motion. The baseline handles
+English and Japanese color aliases, normalizes full-width Unicode text, and deliberately rejects
+missing and ambiguous object or target references.
+
+End-to-end evaluation used four independently seeded commands covering red/purple objects and
+green/yellow targets. Every combination reached 4/4, for 16/16 total. This validates the interface
+and complete language-to-perception-to-control path; it does not measure paraphrase breadth or visual
+language reasoning. A future VLM adapter must preserve the rejection contract and beat this baseline
+on a frozen open-vocabulary instruction suite before it can replace the deterministic grounder.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5m-language-grounding.json`.

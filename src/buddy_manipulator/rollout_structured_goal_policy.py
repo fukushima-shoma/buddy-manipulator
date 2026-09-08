@@ -34,6 +34,7 @@ from buddy_manipulator.grasp_success_critic import (
     OutcomeRankedGraspPosePolicy,
 )
 from buddy_manipulator.kinematics import JointAngles, UnreachableTargetError
+from buddy_manipulator.language_grounding import LexiconGoalGrounder
 from buddy_manipulator.placement_success_critic import (
     PlacementSuccessCriticRunner,
     grid_release_residuals,
@@ -47,6 +48,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("grasp_critic_checkpoint", type=Path)
     parser.add_argument("placement_critic_checkpoint", type=Path)
+    parser.add_argument(
+        "--instruction",
+        help="Ground one English or Japanese instruction and use it for every episode.",
+    )
     parser.add_argument("--place-controller", choices=("baseline", "critic"), default="critic")
     parser.add_argument("--episodes", type=int, default=40)
     parser.add_argument("--seed", type=int, default=4641)
@@ -117,11 +122,20 @@ def main() -> None:
     estimators: dict[str, OnlinePlanarBiasEstimator] = {}
     rng = random.Random(args.seed)
     domain_rng = random.Random(args.seed + 1_000_003)
-    goals = [
-        ManipulationGoal(object_color, target_color)
-        for object_color in OBJECT_COLORS
-        for target_color in TARGET_COLORS
-    ]
+    grounding = (
+        LexiconGoalGrounder().ground(args.instruction)
+        if args.instruction is not None
+        else None
+    )
+    goals = (
+        [grounding.goal]
+        if grounding is not None
+        else [
+            ManipulationGoal(object_color, target_color)
+            for object_color in OBJECT_COLORS
+            for target_color in TARGET_COLORS
+        ]
+    )
     records = []
     for index in range(args.episodes):
         goal = goals[index % len(goals)]
@@ -318,6 +332,8 @@ def main() -> None:
     output = {
         "format_version": 1,
         "controller": args.place_controller,
+        "instruction": args.instruction,
+        "grounding": None if grounding is None else grounding.to_dict(),
         "seed": args.seed,
         "episode_count": args.episodes,
         "success_count": successes,

@@ -1,0 +1,53 @@
+{
+  "experiment_id": "LANG-01",
+  "phase": "5M",
+  "date": "2026-09-08",
+  "grounder": {
+    "method": "bilingual_lexicon_v1",
+    "languages": ["English", "Japanese"],
+    "objects": ["red", "purple"],
+    "targets": ["green", "yellow"],
+    "safety_contract": "Return exactly one supported structured goal or reject before motion.",
+    "unit_tests": 9
+  },
+  "end_to_end_rollouts": [
+    {
+      "instruction": "Place the red block in the green zone",
+      "grounded_goal": "red:green",
+      "seed": 5449,
+      "successes": 4,
+      "episodes": 4
+    },
+    {
+      "instruction": "紫のブロックを緑色のエリアに置いて",
+      "grounded_goal": "purple:green",
+      "seed": 5450,
+      "successes": 4,
+      "episodes": 4
+    },
+    {
+      "instruction": "Move the red cube onto the yellow target",
+      "grounded_goal": "red:yellow",
+      "seed": 5451,
+      "successes": 4,
+      "episodes": 4
+    },
+    {
+      "instruction": "紫のキューブを黄色のターゲットへ運んで",
+      "grounded_goal": "purple:yellow",
+      "seed": 5452,
+      "successes": 4,
+      "episodes": 4
+    }
+  ],
+  "aggregate": {
+    "successes": 16,
+    "episodes": 16,
+    "success_rate": 1.0
+  },
+  "decision": {
+    "status": "accepted as the Phase 5 language-command interface",
+    "limitation": "This deterministic baseline is not an open-vocabulary VLM and does not resolve spatial or relational references.",
+    "future_gate": "A VLM adapter must preserve ambiguity rejection and improve a frozen open-vocabulary evaluation suite."
+  }
+}
