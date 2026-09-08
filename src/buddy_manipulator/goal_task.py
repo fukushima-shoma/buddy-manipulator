@@ -211,12 +211,48 @@ def execute_goal_grasp(
     )
 
 
+def canonical_handoff_keyframe(
+    *,
+    position_m: tuple[float, float, float] = (0.20, 0.06, 0.20),
+    duration: float = 1.2,
+) -> Keyframe:
+    """Move a held object to one reproducible pre-placement arm pose."""
+    if duration <= 0:
+        raise ValueError("handoff duration must be positive")
+    if position_m[2] <= 0:
+        raise ValueError("handoff height must be positive")
+    return Keyframe(duration, _top_down_joints(*position_m), 0.0)
+
+
+def execute_canonical_handoff(
+    model: Any,
+    data: Any,
+    *,
+    position_m: tuple[float, float, float] = (0.20, 0.06, 0.20),
+    duration: float = 1.2,
+    viewer: Any | None = None,
+    step_callback: Callable[[Any, Any], None] | None = None,
+) -> None:
+    """Normalize the closed-gripper state before learned placement."""
+    run_keyframes(
+        model,
+        data,
+        [canonical_handoff_keyframe(position_m=position_m, duration=duration)],
+        viewer=viewer,
+        realtime=viewer is not None,
+        step_callback=step_callback,
+    )
+
+
 def execute_pick_and_place(
     model: Any,
     data: Any,
     goal: ManipulationGoal,
     detection: WorldDetection,
     *,
+    normalize_handoff: bool = False,
+    handoff_position_m: tuple[float, float, float] = (0.20, 0.06, 0.20),
+    handoff_duration_seconds: float = 1.2,
     viewer: Any | None = None,
     step_callback: Callable[[Any, Any], None] | None = None,
 ) -> GoalTaskResult:
@@ -230,8 +266,19 @@ def execute_pick_and_place(
         transport_radius * math.sin(target_angle),
     )
     place_height = 0.052
+    handoff_keyframes = (
+        [
+            canonical_handoff_keyframe(
+                position_m=handoff_position_m,
+                duration=handoff_duration_seconds,
+            )
+        ]
+        if normalize_handoff
+        else []
+    )
     keyframes = [
         *goal_grasp_keyframes(detection),
+        *handoff_keyframes,
         Keyframe(2.5, _top_down_joints(*target_transport, 0.20), 0.0),
         Keyframe(1.5, _top_down_joints(target_x, target_y, 0.20), 0.0),
         Keyframe(1.5, _top_down_joints(target_x, target_y, place_height), 0.0),

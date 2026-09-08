@@ -35,8 +35,9 @@ place skillを隔離すると24/40まで改善した。一方、learned graspか
 40/40から38/40へ悪化させたためrejectした。Phase 5Hではpose perturbationを収集し、実際の
 lift outcomeからgrasp success criticを学習した。Fresh graspを通常条件2 seeds合計75/80から
 80/80、既知+6 mm Y bias条件34/40から40/40へ改善したが、learned placeまで含むfull taskは26/40で同率
-だった。次はgrasp後のhandoff poseを標準化するか、観測したobject/gripper stateでplace policyを
-conditionして下流のregressionを減らす。
+だった。Phase 5Iではcanonical handoffでobject XY variationを大きく減らしたが、inference-onlyは
+9/20から7/20、matched/grounded BCは両方0/20となりrejectした。次はabsolute action trajectoryを
+再学習せず、analytical placementをpriorとしてrelease pose候補を実際のtask outcomeでrankingする。
 
 ## Phase 6: 実機移行
 

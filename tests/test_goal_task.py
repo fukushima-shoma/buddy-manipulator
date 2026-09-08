@@ -8,12 +8,14 @@ mujoco = pytest.importorskip("mujoco")
 from buddy_manipulator.goal_task import (
     ManipulationGoal,
     apply_object_positions,
+    canonical_handoff_keyframe,
     detect_goal_object,
     execute_pick_and_place,
     object_position,
     sample_object_positions,
 )
 from buddy_manipulator.kinematics import JointAngles
+from buddy_manipulator.kinematics import forward_kinematics
 from buddy_manipulator.sim_camera import RgbdCamera
 from buddy_manipulator.simulation import Keyframe, load_model, run_keyframes
 
@@ -68,3 +70,17 @@ def test_object_position_rejects_unknown_color() -> None:
     assert object_position(model, data, "red").shape == (3,)
     with pytest.raises(ValueError, match="unsupported object color"):
         object_position(model, data, "blue")
+
+
+def test_canonical_handoff_is_reachable_and_keeps_gripper_closed() -> None:
+    keyframe = canonical_handoff_keyframe()
+    pose = forward_kinematics(keyframe.joints)
+
+    assert (pose.x, pose.y, pose.z) == pytest.approx((0.20, 0.06, 0.20))
+    assert keyframe.duration == pytest.approx(1.2)
+    assert keyframe.gripper == 0.0
+
+
+def test_canonical_handoff_rejects_invalid_duration() -> None:
+    with pytest.raises(ValueError, match="duration"):
+        canonical_handoff_keyframe(duration=0.0)

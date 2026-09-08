@@ -274,12 +274,16 @@ def test_goal_skill_slices_overlap_around_grasp_handoff() -> None:
 
     grasp = slice_goal_skill_episodes([episode], "grasp")[0]
     place = slice_goal_skill_episodes([episode], "place")[0]
+    handoff_place = slice_goal_skill_episodes([episode], "handoff_place")[0]
 
     assert grasp.timestamp[-1] == pytest.approx(4.6)
     assert place.timestamp[0] == pytest.approx(3.2)
+    assert handoff_place.timestamp[0] == pytest.approx(7.2)
     assert np.all(grasp.goal[:, 2:4] == 0.0)
     assert np.all(place.goal[:, 0:2] == 0.0)
     assert np.all(place.goal[:, 2:4] == 1.0)
+    assert np.all(handoff_place.goal[:, 0:2] == 1.0)
+    assert np.all(handoff_place.goal[:, 2:4] == 1.0)
     assert grasp.sample_count + place.sample_count > episode.sample_count
     with pytest.raises(ValueError, match="unsupported goal skill"):
         slice_goal_skill_episodes([episode], "release")

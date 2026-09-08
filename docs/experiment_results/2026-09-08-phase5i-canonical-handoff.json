@@ -1,0 +1,60 @@
+{
+  "experiment_id": "HANDOFF-01",
+  "phase": "5I",
+  "date": "2026-09-08",
+  "hypothesis": "A canonical post-grasp arm and object state will improve learned placement stability.",
+  "canonical_handoff": {
+    "tool_pose_m": [0.2, 0.06, 0.2],
+    "duration_seconds": 1.2,
+    "gripper_opening_m": 0.0,
+    "seed": 4338,
+    "object_xy_std_before_m": [0.005165334161614873, 0.02180528624901451],
+    "object_xy_std_after_m": [0.0019472055885403064, 0.0006402250494779545],
+    "object_position_after_mean_m": [0.1974175944980575, 0.05921946036206055, 0.1348575824980976]
+  },
+  "inference_only_screen": {
+    "seed": 4338,
+    "episodes": 20,
+    "current_successes": 9,
+    "canonical_successes": 7,
+    "recoveries": 4,
+    "regressions": 6
+  },
+  "matched_dataset": {
+    "seed": 4439,
+    "episodes": 80,
+    "successful_episodes": 75,
+    "samples_per_episode": 74,
+    "skill": "handoff_place",
+    "skill_start_seconds": 7.1
+  },
+  "matched_factorized_bc": {
+    "training_seed": 7,
+    "best_epoch": 50,
+    "validation_normalized_mse": 0.009941853018421116,
+    "validation_mean_action_mae": 0.010674877470267114,
+    "rollout_seed": 4439,
+    "successes": 0,
+    "episodes": 20
+  },
+  "grounded_factorized_bc": {
+    "training_seed": 17,
+    "features": ["goal-selected object geometry", "goal-selected target geometry"],
+    "best_epoch": 48,
+    "validation_normalized_mse": 0.026547639143535872,
+    "validation_mean_action_mae": 0.014065056715080399,
+    "rollout_seed": 4439,
+    "successes": 0,
+    "episodes": 20
+  },
+  "paired_rollout_baseline": {
+    "seed": 4439,
+    "successes": 11,
+    "episodes": 20
+  },
+  "decision": {
+    "status": "rejected as a policy improvement; retain tooling and data mode",
+    "reason": "Canonicalization narrowed the handoff distribution, but neither matched nor explicitly grounded absolute-action BC remained stable in closed loop.",
+    "next": "Use analytical target transport as a prior and learn a bounded placement decision from actual placement outcomes."
+  }
+}

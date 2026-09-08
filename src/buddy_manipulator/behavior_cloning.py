@@ -16,12 +16,13 @@ from torch.utils.data import Dataset
 from buddy_manipulator.task_phase import GOAL_PHASE_DIM, encode_goal_phase
 
 
-GOAL_SKILLS = ("full", "grasp", "place")
+GOAL_SKILLS = ("full", "grasp", "place", "handoff_place")
 # The expert closes at 3.2 s and finishes the vertical lift at 4.7 s.  The
 # overlap gives the place policy training support around an observation-driven
 # handoff instead of requiring one exact transition frame.
 GOAL_GRASP_END_SECONDS = 4.7
 GOAL_PLACE_START_SECONDS = 3.2
+GOAL_HANDOFF_PLACE_START_SECONDS = 7.1
 
 
 @dataclass(frozen=True)
@@ -268,6 +269,10 @@ def slice_goal_skill_episodes(
         elapsed = episode.timestamp - episode.timestamp[0]
         if skill == "grasp":
             indices = np.flatnonzero(elapsed <= GOAL_GRASP_END_SECONDS + 1e-6)
+        elif skill == "handoff_place":
+            indices = np.flatnonzero(
+                elapsed >= GOAL_HANDOFF_PLACE_START_SECONDS - 1e-6
+            )
         else:
             indices = np.flatnonzero(elapsed >= GOAL_PLACE_START_SECONDS - 1e-6)
         if indices.size == 0:

@@ -39,6 +39,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-hz", type=float, default=5.0)
     parser.add_argument("--width", type=int, default=160)
     parser.add_argument("--height", type=int, default=120)
+    parser.add_argument(
+        "--handoff-normalization",
+        choices=("none", "canonical"),
+        default="none",
+    )
     return parser.parse_args()
 
 
@@ -51,6 +56,7 @@ def collect_goal_episode(
     sample_hz: float,
     width: int,
     height: int,
+    normalize_handoff: bool = False,
 ) -> bool:
     model, data = load_model()
     apply_object_positions(model, data, positions)
@@ -69,6 +75,7 @@ def collect_goal_episode(
             data,
             goal,
             detection,
+            normalize_handoff=normalize_handoff,
             step_callback=recorder.maybe_record,
         )
     arrays = recorder.arrays()
@@ -82,10 +89,21 @@ def collect_goal_episode(
         arrays,
         success=result.success,
         block_start_position=positions[goal.object_color],
-        source="goal_scripted",
+        source=(
+            "goal_scripted_canonical_handoff"
+            if normalize_handoff
+            else "goal_scripted"
+        ),
         task_goal=goal.to_dict(),
         scene_state={
-            "task_version": "phase5a-v1",
+            "task_version": (
+                "phase5i-canonical-handoff-v1"
+                if normalize_handoff
+                else "phase5a-v1"
+            ),
+            "handoff_normalization": (
+                "canonical" if normalize_handoff else "none"
+            ),
             "object_start_positions_m": {
                 color: list(position) for color, position in positions.items()
             },
@@ -125,6 +143,7 @@ def main() -> None:
             sample_hz=args.sample_hz,
             width=args.width,
             height=args.height,
+            normalize_handoff=args.handoff_normalization == "canonical",
         )
     print(
         f"goal collection complete: {successes}/{args.episodes} successful "

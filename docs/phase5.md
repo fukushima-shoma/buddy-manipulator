@@ -331,3 +331,44 @@ post-grasp pose consistency and learned placement are now the active bottlenecks
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5h-grasp-success-critic.json`.
+
+## Phase 5I: canonical grasp-to-place handoff
+
+Phase 5I tests whether post-grasp state variation causes the placement regressions seen in Phase 5H.
+An optional closed-gripper keyframe moves every acquired object to the reachable Cartesian pose
+`(0.20, 0.06, 0.20) m` before placement. The extra 1.2 seconds is included in the fixed task budget,
+the recurrent joint history includes this motion, and rollout JSON records object positions before and
+after normalization.
+
+The intervention worked mechanically. Across seed 4338, object XY standard deviation changed from
+`(5.17, 21.81) mm` before normalization to `(1.95, 0.64) mm` afterward. It did not work as an
+inference-only model change: the current place policy fell from 9/20 to 7/20, recovering four episodes
+but regressing six because the canonical state was outside its training distribution.
+
+To remove that mismatch, 80 new canonical-handoff expert trajectories were collected; 75 were task
+successful and used by the default successful-only trainer. A new `handoff_place` dataset view starts
+after the 7.1-second grasp-plus-normalization prelude. The matched factorized model achieved validation
+MAE 0.01067, but scored 0/20 against 11/20 for the current hierarchy on seed 4439. A second model kept
+object identity and added explicit goal-selected object/target visual features; it reached validation
+MAE 0.01407 and also scored 0/20.
+
+HANDOFF-01 is rejected as a policy improvement but retained as instrumentation and an ablation. The
+result rules out handoff variance as a sufficient explanation: absolute-action BC still compounds
+small closed-loop errors even from a narrow initial state. The next experiment should retain the
+analytical transport primitive and learn a bounded release-pose or trajectory residual from actual
+placement outcomes, mirroring the successful Phase 5H grasp critic.
+
+```bash
+./scripts/collect_goal_demos.sh \
+  --episodes 80 --seed 4439 \
+  --handoff-normalization canonical \
+  --output-dir data/goal_demonstrations_handoff
+
+./scripts/run_training.sh data/goal_demonstrations_handoff \
+  --goal-skill handoff_place --phase-conditioning \
+  --factorized-target-heads --history-horizon 8 --action-horizon 8 \
+  --holdout-goal purple:yellow --device mps
+```
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5i-canonical-handoff.json`.

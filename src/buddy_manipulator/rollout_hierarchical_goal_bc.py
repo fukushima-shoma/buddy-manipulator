@@ -55,6 +55,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--grasp-known-bias-y-mm", type=float, default=0.0)
     parser.add_argument("--grasp-critic-minimum-improvement", type=float, default=0.03)
     parser.add_argument(
+        "--handoff-normalization",
+        choices=("none", "canonical"),
+        default="none",
+    )
+    parser.add_argument("--handoff-duration-seconds", type=float, default=1.2)
+    parser.add_argument(
         "--transition",
         choices=("observable", "oracle"),
         default="observable",
@@ -131,6 +137,8 @@ def main() -> None:
                     camera,
                     goal,
                     grasp_pose_policy=grasp_pose_policy,
+                    normalize_handoff=args.handoff_normalization == "canonical",
+                    handoff_duration_seconds=args.handoff_duration_seconds,
                     control_hz=args.control_hz,
                     max_seconds=args.max_seconds,
                 )
@@ -203,6 +211,8 @@ def main() -> None:
             else None
         ),
         "grasp_known_bias_y_mm": args.grasp_known_bias_y_mm,
+        "handoff_normalization": args.handoff_normalization,
+        "handoff_duration_seconds": args.handoff_duration_seconds,
         "transition_mode": (
             f"{args.grasp_controller}_grasp"
             if args.grasp_controller in ("expert", "residual", "critic")

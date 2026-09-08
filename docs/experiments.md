@@ -30,6 +30,7 @@ enter training data.
 | HYBRID-01 | A calibrated model-based fallback can cover regions where learned behavior is unreliable. | Route the outer 1 cm workspace band to an RGB-D/IK expert and retain the learned ensemble in the center. | 86/90 versus current 66/90 on locked unseen placements; 20 recoveries and 0 regressions. | Promoted as recommended system policy. |
 | POSE-01 | A learned metric-pose residual can preserve IK structure while correcting RGB-D bias. | Predict a bounded XYZ correction from analytical pose features. | Held-out mean error improved by 0.165 mm, but grasp success fell from 40/40 to 34/40 at full blend and 38/40 at 25%. | Rejected; tooling retained. |
 | GRASP-CRITIC-01 | Actual lift outcomes can identify contact-stable residuals better than geometric-center labels. | Train a candidate-ranking critic on 780 perturbed grasps with an analytical fallback margin. | Two fresh normal seeds improved 75/80 to 80/80; known +6 mm Y-bias improved 34/40 to 40/40; full task tied 26/40. | Accepted for grasp acquisition; end-to-end policy unchanged. |
+| HANDOFF-01 | Canonicalizing the post-grasp state will make learned placement more stable. | Add a fixed closed-gripper handoff pose; test inference-only use, matched retraining, and explicit object/target grounding. | XY variation fell sharply, but inference-only scored 7/20 versus 9/20 and both matched BC variants scored 0/20 versus 11/20. | Rejected as a policy; instrumentation retained. |
 
 ## DIFF-01 design decision
 
@@ -303,3 +304,26 @@ or condition the place policy on the measured object/gripper state at transition
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5h-grasp-success-critic.json`.
+
+## Phase 5I canonical-handoff decision
+
+HANDOFF-01 added a 1.2-second closed-gripper move to `(0.20, 0.06, 0.20) m` and recorded the selected
+object position on both sides of the transition. This reduced object XY standard deviation from
+`(5.17, 21.81) mm` to `(1.95, 0.64) mm`, proving that the intervention actually narrowed the handoff
+distribution. The existing place model nevertheless fell from 9/20 to 7/20 on paired seed 4338, with
+four recoveries and six regressions.
+
+Matched data did not solve the control problem. Of 80 newly collected canonical trajectories, 75 were
+successful. A post-handoff factorized place model reached validation action MAE 0.01067, yet scored
+0/20 versus the current hierarchy's 11/20 on seed 4439. Keeping object identity and exposing explicit
+goal-selected object and target geometry produced validation MAE 0.01407 and the same 0/20 result.
+These are additional examples of teacher-forced offline accuracy failing to predict closed-loop task
+success.
+
+The canonical motion, telemetry, dataset mode, and CLI remain useful research controls, but neither
+model is promoted. Further absolute-action BC tuning is deprioritized. The next experiment will use
+analytical target transport as a prior and learn only bounded placement decisions from actual task
+outcomes, analogous to GRASP-CRITIC-01.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5i-canonical-handoff.json`.

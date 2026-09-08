@@ -258,7 +258,7 @@ full residual 34/40、25% blend 38/40だった。Full-task二組では45/80対44
 on-policy pose perturbationのlift/contact outcomeを教師にする。
 
 Phase 5Hでは60 scenes × 13候補（合計780 grasp attempts）のXY pose perturbationを実行し、
-実際のlift successを教師にしたsuccess criticを学習した。Fresh paired graspでは通常条件を
+実際のlift successを教師にしたsuccess criticを学習した。Fresh paired graspでは
 2つの通常条件seed合計を75/80から80/80へ、既知の+6 mm Y calibration bias条件を
 34/40から40/40へ改善した。
 一方、既存のlearned place policyまで含むfull taskは26/40で同率（3 recoveries / 3 regressions）
@@ -273,6 +273,13 @@ Phase 5Hでは60 scenes × 13候補（合計780 grasp attempts）のXY pose pert
   outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
   --controller critic --episodes 40 --seed 3934
 ```
+
+Phase 5Iではgrasp後のarm/object stateをcanonical poseへ揃えた。XY標準偏差は
+約`(5.2, 21.8) mm`から`(1.9, 0.6) mm`へ縮小したが、既存place policyへのinference-only適用は
+9/20から7/20へ悪化した。Canonical trajectory 80件を新規収集して再学習しても、通常BCと
+explicit object/target groundingの両方が0/20だった。Offline MAEの改善がclosed-loop安定性へ
+移らないため、handoff normalizationはablationとして保持し、次はanalytical place trajectory上で
+release candidateをoutcome rankingするstructured policyへ進む。
 
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \

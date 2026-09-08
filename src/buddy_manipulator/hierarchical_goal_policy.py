@@ -11,8 +11,10 @@ import numpy as np
 from buddy_manipulator.goal_task import (
     ManipulationGoal,
     detect_goal_object,
+    execute_canonical_handoff,
     execute_goal_grasp,
     evaluate_goal_task,
+    object_position,
 )
 from buddy_manipulator.goal_policy_rollout import run_closed_loop_goal_policy
 from buddy_manipulator.policy_rollout import (
@@ -46,7 +48,7 @@ class SkillGoalPolicyRunner:
         skill_goal = np.asarray(goal, dtype=np.float32).copy()
         if self.skill == "grasp":
             skill_goal[2:4] = 0.0
-        else:
+        elif str(getattr(self.policy, "goal_skill", "full")) != "handoff_place":
             skill_goal[0:2] = 0.0
         return self.policy.predict_chunk(
             rgb, depth, joint_position, skill_goal, phase
@@ -107,6 +109,9 @@ class HierarchicalGoalPolicyResult:
     transition_step: int | None
     transition_mode: str
     max_detected_object_height_m: float | None
+    handoff_normalized: bool
+    handoff_object_position_before_m: tuple[float, float, float] | None
+    handoff_object_position_after_m: tuple[float, float, float] | None
     trace: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:
@@ -121,12 +126,18 @@ def run_expert_grasp_then_place_policy(
     goal: ManipulationGoal,
     *,
     grasp_pose_policy: Any | None = None,
+    normalize_handoff: bool = False,
+    handoff_position_m: tuple[float, float, float] = (0.20, 0.06, 0.20),
+    handoff_duration_seconds: float = 1.2,
     control_hz: float = 5.0,
     max_seconds: float = 18.0,
 ) -> HierarchicalGoalPolicyResult:
     """Measure the learned place skill behind a deterministic RGB-D/IK grasp."""
-    if control_hz <= 0 or max_seconds <= 5.9:
+    prelude_seconds = 5.9 + (handoff_duration_seconds if normalize_handoff else 0.0)
+    if control_hz <= 0 or max_seconds <= prelude_seconds:
         raise ValueError("max seconds must leave time after the expert grasp")
+    if normalize_handoff and handoff_duration_seconds <= 0:
+        raise ValueError("handoff duration must be positive")
     initial_frame = camera.capture(data)
     detection = (
         grasp_pose_policy.predict_detection(initial_frame, goal)
@@ -148,6 +159,20 @@ def run_expert_grasp_then_place_policy(
         detection,
         step_callback=record_joint_history,
     )
+    handoff_before = tuple(
+        float(value) for value in object_position(model, data, goal.object_color)
+    )
+    if normalize_handoff:
+        execute_canonical_handoff(
+            model,
+            data,
+            position_m=handoff_position_m,
+            duration=handoff_duration_seconds,
+            step_callback=record_joint_history,
+        )
+    handoff_after = tuple(
+        float(value) for value in object_position(model, data, goal.object_color)
+    )
     place_policy.reset()
     if hasattr(place_policy, "prime_joint_history"):
         place_policy.prime_joint_history(joint_history)
@@ -163,10 +188,10 @@ def run_expert_grasp_then_place_policy(
         camera,
         goal,
         control_hz=control_hz,
-        max_seconds=max_seconds - 5.9,
+        max_seconds=max_seconds - prelude_seconds,
         execute_chunk_steps=1,
     )
-    expert_steps = math.ceil(5.9 * control_hz)
+    expert_steps = math.ceil(prelude_seconds * control_hz)
     trace = [
         {**record, "step": int(record["step"]) + expert_steps, "skill": "place"}
         for record in place_result.trace
@@ -185,6 +210,9 @@ def run_expert_grasp_then_place_policy(
             else "expert_grasp"
         ),
         max_detected_object_height_m=post_grasp_height,
+        handoff_normalized=normalize_handoff,
+        handoff_object_position_before_m=handoff_before,
+        handoff_object_position_after_m=handoff_after,
         trace=trace,
     )
 
@@ -338,5 +366,8 @@ def run_hierarchical_goal_policy(
         transition_step=transition_step,
         transition_mode=transition_mode,
         max_detected_object_height_m=maximum_detected_height,
+        handoff_normalized=False,
+        handoff_object_position_before_m=None,
+        handoff_object_position_after_m=None,
         trace=trace,
     )

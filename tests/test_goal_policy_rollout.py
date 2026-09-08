@@ -97,3 +97,19 @@ def test_skill_goal_runner_masks_irrelevant_goal_factor() -> None:
 
     assert captured[0].tolist() == [1.0, 1.0, 0.0, 0.0]
     assert captured[1].tolist() == [0.0, 0.0, 1.0, 1.0]
+
+
+def test_handoff_place_runner_preserves_object_for_visual_grounding() -> None:
+    policy = FakeGoalPolicy(1.0)
+    policy.goal_skill = "handoff_place"
+    captured = []
+    policy.predict_chunk = (
+        lambda _r, _d, _j, goal, _p=None: captured.append(goal.copy())
+        or np.ones((3, 6))
+    )
+
+    SkillGoalPolicyRunner(policy, "place").predict_chunk(
+        None, None, None, np.ones(4)
+    )
+
+    assert captured[0].tolist() == [1.0, 1.0, 1.0, 1.0]
