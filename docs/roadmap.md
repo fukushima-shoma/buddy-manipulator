@@ -41,7 +41,9 @@ lift outcomeからgrasp success criticを学習した。Fresh graspを通常条�
 Phase 5Jは通常40/40を維持し、−55 mm X biasを34/40から40/40へ改善した。次はbiasを既知として
 与えず、camera observationからonline推定した。Phase 5Kはhidden −55 mm X biasでbaseline
 37/40に対して40/40を達成し、persistent calibration offsetへの適応を確認した。次はphysics、
-appearance、calibrationをrandomizeしたstress benchmarkでfailure envelopeを測る。
+appearance、calibrationをrandomizeしたstress benchmarkでfailure envelopeを測った。Phase 5Lの
+randomized-trained placement criticはfresh stress 2 seedsを108/160から119/160へ改善し、nominal
+40/40も維持した。次はnatural-language instructionをstructured goalへgroundingする。
 
 ## Phase 6: 実機移行
 

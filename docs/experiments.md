@@ -33,6 +33,7 @@ enter training data.
 | HANDOFF-01 | Canonicalizing the post-grasp state will make learned placement more stable. | Add a fixed closed-gripper handoff pose; test inference-only use, matched retraining, and explicit object/target grounding. | XY variation fell sharply, but inference-only scored 7/20 versus 9/20 and both matched BC variants scored 0/20 versus 11/20. | Rejected as a policy; instrumentation retained. |
 | PLACE-CRITIC-01 | Placement outcomes can supervise a bounded release decision more reliably than absolute-action BC. | Rank XY release residuals around deterministic IK transport with an analytical fallback. | Normal stayed 40/40; controlled −55 mm X-bias improved 34/40 to 40/40 with six recoveries and no regressions. | Accepted as the Phase 5 placement component. |
 | BIAS-EST-01 | Persistent release bias can be estimated from prior observable placement outcomes. | Subtract selected commands from RGB-D object-to-target errors and rank candidates with the online estimate. | Hidden −55 mm X-bias improved from 37/40 to 40/40 on paired fresh scenes; final estimate was (−41.6, 3.7) mm. | Accepted for persistent calibration offsets. |
+| ROBUST-01 | Training the release critic across dynamics and appearance variation improves combined-shift robustness. | Collect 720 randomized outcomes and retrain the candidate ranker; add safe failure containment and observable re-grasp. | Two fresh stress seeds improved from 108/160 to 119/160; nominal remained 40/40. | Accepted as the robust placement critic. |
 
 ## DIFF-01 design decision
 
@@ -365,3 +366,31 @@ remaining failure envelope rather than tune against a single nominal scene.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5k-online-bias-estimation.json`.
+
+## Phase 5L domain-randomization decision
+
+ROBUST-01 randomizes finger friction, object mass, object appearance, and XY release jitter with every
+sample recorded in the result JSON. The first seed exposed two system issues: stress failures could
+abort on unreachable IK, and post-grasp state was not explicitly verified. The evaluator now records
+those cases as failures, checks observable lift, and permits one re-grasp. This is reliability
+hardening, not a hidden improvement to the success criterion.
+
+Two inference-only ideas were screened on diagnostic seed 4944. Goal-specific calibration and
+0.12-radian joint-space waypoint interpolation each scored the same 61/80 as the global estimator and
+original trajectory. Both controls remain available for ablation but are not enabled by the recommended
+runner. The model-side hypothesis then collected 720 randomized attempts, of which 314 succeeded and
+223 were outside IK reach. A critic trained on those labels reached 81.3% held-out accuracy and
+87.5% ranking success over 16 held-out scenes.
+
+| Stress seed | Nominal-trained critic | Randomized-trained critic | Recovered | Regressed |
+|---:|---:|---:|---:|---:|
+| 5146 | 53/80 | 60/80 | 10 | 3 |
+| 5247 | 55/80 | 59/80 | 7 | 3 |
+| **Total** | **108/160 (67.5%)** | **119/160 (74.4%)** | **17** | **6** |
+
+The gain repeats on both untouched seeds and the candidate retained 40/40 on nominal seed 5348, so it
+is promoted. The remaining 41 stress failures include 11 verified grasp failures; future grasp work
+must include dynamics variation rather than infer release policy changes can repair acquisition drops.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5l-domain-randomization.json`.

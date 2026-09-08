@@ -418,3 +418,25 @@ tool, or target-frame changes.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5k-online-bias-estimation.json`.
+
+## Phase 5L: domain-randomized robustness
+
+Phase 5L measures combined distribution shift. Every episode records a seeded finger-friction scale
+from 0.7-1.3, object-mass scale from 0.6-1.6, object-appearance scale from 0.7-1.15, and independent
+XY placement jitter of ±15 mm around a hidden −40 mm X offset. The evaluator verifies the selected
+object was lifted, permits one fresh RGB-D re-grasp, and contains unreachable placement requests as
+failed episodes instead of terminating the benchmark.
+
+The initial nominal-trained critic reached 61/80 on diagnostic seed 4944. Goal-specific calibration
+and joint-space waypoint interpolation each changed the failure set but remained 61/80, so neither is
+promoted. A new placement critic was trained on 720 randomized attempts from 80 scenes. Its held-out
+ranking success was 14/16 (87.5%).
+
+On untouched paired seeds, the randomized critic improved 53/80 to 60/80 and 55/80 to 59/80. The
+aggregate gain is 108/160 (67.5%) to 119/160 (74.4%), with 17 recoveries and 6 regressions. It also
+retained 40/40 on nominal seed 5348. ROBUST-01 is therefore accepted for the placement component.
+Eleven of the 41 candidate failures across the two stress seeds were verified grasp failures, making
+grasp robustness under low-friction/high-mass combinations a remaining limit.
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5l-domain-randomization.json`.

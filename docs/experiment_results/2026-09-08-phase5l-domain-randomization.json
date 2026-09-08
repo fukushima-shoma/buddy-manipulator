@@ -1,0 +1,74 @@
+{
+  "experiment_id": "ROBUST-01",
+  "phase": "5L",
+  "date": "2026-09-08",
+  "stress_condition": {
+    "finger_friction_scale": [0.7, 1.3],
+    "object_mass_scale": [0.6, 1.6],
+    "appearance_scale": [0.7, 1.15],
+    "persistent_place_bias_xy_mm": [-40.0, 0.0],
+    "per_episode_place_bias_jitter_xy_mm": [-15.0, 15.0],
+    "bias_knowledge": "online"
+  },
+  "diagnostic": {
+    "seed": 4944,
+    "episodes": 80,
+    "nominal_critic_successes": 61,
+    "goal_scoped_calibration_successes": 61,
+    "interpolated_placement_successes": 61,
+    "decision": "Do not promote either inference-only ablation."
+  },
+  "training": {
+    "seed": 5045,
+    "scenes": 80,
+    "candidates_per_scene": 9,
+    "attempts": 720,
+    "successes": 314,
+    "unreachable_attempts": 223,
+    "model_seed": 31,
+    "best_epoch": 42,
+    "validation_accuracy": 0.8125,
+    "validation_balanced_accuracy": 0.811304347826087,
+    "validation_ranking_success_rate": 0.875
+  },
+  "paired_stress_rollouts": [
+    {
+      "seed": 5146,
+      "episodes": 80,
+      "nominal_critic_successes": 53,
+      "randomized_critic_successes": 60,
+      "recoveries": 10,
+      "regressions": 3,
+      "candidate_grasp_failures": 4
+    },
+    {
+      "seed": 5247,
+      "episodes": 80,
+      "nominal_critic_successes": 55,
+      "randomized_critic_successes": 59,
+      "recoveries": 7,
+      "regressions": 3,
+      "candidate_grasp_failures": 7
+    }
+  ],
+  "aggregate": {
+    "episodes": 160,
+    "nominal_critic_successes": 108,
+    "nominal_critic_success_rate": 0.675,
+    "randomized_critic_successes": 119,
+    "randomized_critic_success_rate": 0.74375,
+    "recoveries": 17,
+    "regressions": 6
+  },
+  "nominal_safety_gate": {
+    "seed": 5348,
+    "episodes": 40,
+    "successes": 40
+  },
+  "decision": {
+    "status": "accepted as the robust Phase 5 placement critic",
+    "reason": "The gain repeated on two untouched randomized seeds without nominal regression.",
+    "remaining_limit": "Combined low-friction and high-mass conditions still cause verified grasp failures.",
+    "next": "Ground natural-language instructions into structured manipulation goals."
+  }
+}

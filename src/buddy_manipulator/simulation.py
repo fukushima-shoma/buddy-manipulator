@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib.resources import files
+import math
 import time
 from typing import Any, Callable, Iterable
 
@@ -75,6 +76,38 @@ class Keyframe:
     duration: float
     joints: JointAngles
     gripper: float = 0.03
+
+
+def densify_keyframes(
+    start: JointAngles,
+    keyframes: Iterable[Keyframe],
+    *,
+    maximum_joint_step: float,
+) -> list[Keyframe]:
+    """Interpolate large joint-target jumps while preserving segment duration."""
+    if maximum_joint_step <= 0.0:
+        raise ValueError("maximum joint step must be positive")
+    previous = start
+    dense: list[Keyframe] = []
+    for keyframe in keyframes:
+        source = previous.as_tuple()
+        target = keyframe.joints.as_tuple()
+        largest_delta = max(abs(end - begin) for begin, end in zip(source, target))
+        subdivisions = max(1, math.ceil(largest_delta / maximum_joint_step))
+        for step in range(1, subdivisions + 1):
+            fraction = step / subdivisions
+            dense.append(
+                Keyframe(
+                    duration=keyframe.duration / subdivisions,
+                    joints=JointAngles(
+                        *(begin + fraction * (end - begin)
+                          for begin, end in zip(source, target))
+                    ),
+                    gripper=keyframe.gripper,
+                )
+            )
+        previous = keyframe.joints
+    return dense
 
 
 def run_keyframes(

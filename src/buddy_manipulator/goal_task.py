@@ -9,8 +9,13 @@ from typing import Any, Callable
 
 import numpy as np
 
-from buddy_manipulator.kinematics import Pose, inverse_kinematics
-from buddy_manipulator.simulation import Keyframe, _mujoco, run_keyframes
+from buddy_manipulator.kinematics import JointAngles, Pose, inverse_kinematics
+from buddy_manipulator.simulation import (
+    Keyframe,
+    _mujoco,
+    densify_keyframes,
+    run_keyframes,
+)
 from buddy_manipulator.vision import (
     WorldDetection,
     detect_colored_object,
@@ -279,19 +284,30 @@ def execute_goal_place(
     goal: ManipulationGoal,
     *,
     release_residual_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    maximum_joint_step_rad: float | None = None,
     viewer: Any | None = None,
     step_callback: Callable[[Any, Any], None] | None = None,
 ) -> GoalTaskResult:
     """Transport and release an already-held object using deterministic IK."""
+    keyframes = goal_place_keyframes(
+        model,
+        data,
+        goal,
+        release_residual_m=release_residual_m,
+    )
+    if maximum_joint_step_rad is not None:
+        from buddy_manipulator.policy_rollout import controlled_joint_positions
+
+        current = controlled_joint_positions(model, data)
+        keyframes = densify_keyframes(
+            JointAngles(*(float(value) for value in current[:4])),
+            keyframes,
+            maximum_joint_step=maximum_joint_step_rad,
+        )
     run_keyframes(
         model,
         data,
-        goal_place_keyframes(
-            model,
-            data,
-            goal,
-            release_residual_m=release_residual_m,
-        ),
+        keyframes,
         viewer=viewer,
         realtime=viewer is not None,
         step_callback=step_callback,

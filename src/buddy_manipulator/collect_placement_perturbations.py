@@ -9,6 +9,11 @@ import random
 
 import numpy as np
 
+from buddy_manipulator.domain_randomization import (
+    DomainRandomizationConfig,
+    apply_domain_randomization,
+    sample_domain_randomization,
+)
 from buddy_manipulator.goal_task import (
     OBJECT_COLORS,
     TARGET_COLORS,
@@ -46,6 +51,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidates", type=int, default=9)
     parser.add_argument("--maximum-xy-mm", type=float, default=70.0)
     parser.add_argument("--seed", type=int, default=4540)
+    parser.add_argument("--domain-randomization", action="store_true")
+    parser.add_argument("--friction-scale-min", type=float, default=0.7)
+    parser.add_argument("--friction-scale-max", type=float, default=1.3)
+    parser.add_argument("--mass-scale-min", type=float, default=0.6)
+    parser.add_argument("--mass-scale-max", type=float, default=1.6)
+    parser.add_argument("--appearance-scale-min", type=float, default=0.7)
+    parser.add_argument("--appearance-scale-max", type=float, default=1.15)
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "mps", "cuda"))
     return parser.parse_args()
 
@@ -71,12 +83,22 @@ def main() -> None:
     )
     position_rng = random.Random(args.seed)
     residual_rng = np.random.default_rng(args.seed + 1)
+    domain_rng = random.Random(args.seed + 1_000_003)
+    randomization_config = DomainRandomizationConfig(
+        finger_friction_scale=(args.friction_scale_min, args.friction_scale_max),
+        object_mass_scale=(args.mass_scale_min, args.mass_scale_max),
+        appearance_scale=(args.appearance_scale_min, args.appearance_scale_max),
+        place_bias_jitter_mm=0.0,
+    )
     features = []
     labels = []
     scene_ids = []
     residual_rows = []
     errors = []
     reachable_rows = []
+    friction_rows = []
+    mass_rows = []
+    appearance_rows = []
     for scene_id in range(args.scenes):
         goal = ManipulationGoal(
             OBJECT_COLORS[scene_id % len(OBJECT_COLORS)],
@@ -86,10 +108,17 @@ def main() -> None:
         residuals = sample_release_residuals(
             residual_rng, args.candidates, args.maximum_xy_mm
         )
+        domain_sample = (
+            sample_domain_randomization(domain_rng, randomization_config)
+            if args.domain_randomization
+            else None
+        )
         successes = 0
         for residual_mm in residuals:
             model, data = load_model()
             apply_object_positions(model, data, positions)
+            if domain_sample is not None:
+                apply_domain_randomization(model, data, domain_sample)
             run_keyframes(
                 model,
                 data,
@@ -125,6 +154,15 @@ def main() -> None:
             residual_rows.append(residual_mm.copy())
             errors.append(result.placement_error_m)
             reachable_rows.append(reachable)
+            friction_rows.append(
+                1.0 if domain_sample is None else domain_sample.finger_friction_scale
+            )
+            mass_rows.append(
+                1.0 if domain_sample is None else domain_sample.object_mass_scale
+            )
+            appearance_rows.append(
+                1.0 if domain_sample is None else domain_sample.appearance_scale
+            )
         print(
             f"scene {scene_id:03d}: goal={goal.object_color}->{goal.target_color} "
             f"successes={successes}/{args.candidates}",
@@ -137,6 +175,9 @@ def main() -> None:
         "residual_xy_mm": np.asarray(residual_rows, dtype=np.float32),
         "placement_error_m": np.asarray(errors, dtype=np.float32),
         "reachable": np.asarray(reachable_rows, dtype=np.bool_),
+        "finger_friction_scale": np.asarray(friction_rows, dtype=np.float32),
+        "object_mass_scale": np.asarray(mass_rows, dtype=np.float32),
+        "appearance_scale": np.asarray(appearance_rows, dtype=np.float32),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **arrays)
@@ -154,6 +195,10 @@ def main() -> None:
         "baseline_successes": int(arrays["success"][baseline].sum()),
         "baseline_success_rate": float(arrays["success"][baseline].mean()),
         "unreachable_attempts": int((~arrays["reachable"]).sum()),
+        "domain_randomization_enabled": args.domain_randomization,
+        "domain_randomization_config": (
+            randomization_config.to_dict() if args.domain_randomization else None
+        ),
     }
     args.output.with_suffix(".json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"

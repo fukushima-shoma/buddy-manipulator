@@ -301,6 +301,20 @@ prior outcomes; no simulator object coordinates or injected-bias value are expos
   --bias-knowledge online
 ```
 
+Phase 5L adds seeded domain randomization for finger friction, object mass, object appearance, and
+per-episode placement jitter. A placement critic trained on 720 randomized attempts improved two
+fresh paired stress seeds from 108/160 to 119/160 while retaining 40/40 on a nominal safety gate.
+The benchmark also verifies grasp lift, attempts one RGB-D re-grasp, and records IK failures instead
+of aborting the run.
+
+```bash
+./scripts/run_domain_randomized_policy.sh \
+  outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
+  outputs/phase5/domain_randomization/placement_critic_seed31/placement_success_critic.pt \
+  --episodes 80 --seed 5247 --place-bias-x-mm -40 \
+  --bias-knowledge online
+```
+
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \
   outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \
