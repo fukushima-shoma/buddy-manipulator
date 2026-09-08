@@ -281,3 +281,53 @@ meaningful failure cases.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5g-grasp-pose-residual.json`.
+
+## Phase 5H: outcome-trained grasp success critic
+
+Phase 5H replaces geometric-center supervision with the task outcome that actually matters. For each
+of 60 randomized scenes, the collector executes the zero-offset RGB-D/IK grasp and 12 bounded random
+XY perturbations. The resulting 780 attempts contain RGB-D pose features, the applied residual,
+reachability, selected/distractor final positions, and a binary lift label. A grasp is successful only
+when the selected object reaches 8 cm while the distractor stays below 6 cm.
+
+The MLP critic scores candidate pose residuals rather than directly controlling joints. At runtime a
+bounded 3 mm grid is ranked, but the analytical candidate remains a safety fallback: a learned
+candidate must exceed its predicted success by 0.03. IK-unreachable candidates are removed. This
+preserves the analytical motion primitive and limits learning to a contact-sensitive pose decision.
+
+The dataset had 548/780 successful attempts, 54/60 successful zero-offset baselines, and 47
+IK-unreachable wide perturbations. The scene-held-out split reached 94.2% classification accuracy and
+12/12 ranking success, although the validation baseline was also 12/12. Fresh paired rollouts provide
+the meaningful evidence:
+
+| Condition | Analytical candidate | Success critic | Recoveries | Regressions |
+|---|---:|---:|---:|---:|
+| Normal, seed 3934 | 38/40 | 40/40 | 2 | 0 |
+| Normal replication, seed 4237 | 37/40 | 40/40 | 3 | 0 |
+| **Normal total** | **75/80** | **80/80** | **5** | **0** |
+| Known +6 mm Y bias, seed 4035 | 34/40 | 40/40 | 6 | 0 |
+| Full task + learned place, seed 4136 | 26/40 | 26/40 | 3 | 3 |
+
+The known-bias result assumes the execution bias is available when constructing candidate outcomes;
+it is a controlled calibration-stress benchmark, not automatic online bias estimation. GRASP-CRITIC-01
+is accepted as the preferred Phase 5 grasp component because it improves acquisition with no paired
+grasp regressions. It does not promote the end-to-end hierarchy: the unchanged total score shows that
+post-grasp pose consistency and learned placement are now the active bottlenecks.
+
+```bash
+./scripts/collect_grasp_perturbations.sh \
+  --scenes 60 --candidates 13 --maximum-xy-mm 18 \
+  --seed 3833 --output data/grasp_perturbations/phase5h_seed3833.npz
+
+./scripts/train_grasp_success_critic.sh \
+  data/grasp_perturbations/phase5h_seed3833.npz \
+  --output-dir outputs/phase5/grasp_success_critic/seed17 \
+  --epochs 160 --seed 17 --device mps
+
+./scripts/run_grasp_success_critic.sh \
+  outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
+  --controller critic --episodes 40 --seed 3934
+```
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5h-grasp-success-critic.json`.

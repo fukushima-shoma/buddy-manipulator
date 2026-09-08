@@ -32,8 +32,11 @@ target geometryが次のbottleneckだと特定した。Phase 5Eのtarget-conditi
 closed-loop改善に失敗した。Phase 5Fではgraspとtransport/placeを分離し、expert graspで
 place skillを隔離すると24/40まで改善した。一方、learned graspからのobservable handoffは
 0/8だった。Phase 5Gのbounded pose residualはoffline誤差を改善したがgrasp rolloutを
-40/40から38/40へ悪化させたためrejectした。次はpose perturbationを収集し、geometric center
-ではなくlift/contact outcomeからgrasp success criticまたはresidualを学習する。
+40/40から38/40へ悪化させたためrejectした。Phase 5Hではpose perturbationを収集し、実際の
+lift outcomeからgrasp success criticを学習した。Fresh graspを通常条件2 seeds合計75/80から
+80/80、既知+6 mm Y bias条件34/40から40/40へ改善したが、learned placeまで含むfull taskは26/40で同率
+だった。次はgrasp後のhandoff poseを標準化するか、観測したobject/gripper stateでplace policyを
+conditionして下流のregressionを減らす。
 
 ## Phase 6: 実機移行
 

@@ -29,6 +29,7 @@ enter training data.
 | FT-01 | Preserving the promoted representation while learning corrections avoids forgetting. | Preserve checkpoint split and normalization, freeze image encoder, and fine-tune action heads. | Fine-tuned ensemble scored 20/30 versus current 21/30; a 50/50 old/new blend scored 65/90 versus current 64/90 on untouched validation. | Not promoted; gain was too small. |
 | HYBRID-01 | A calibrated model-based fallback can cover regions where learned behavior is unreliable. | Route the outer 1 cm workspace band to an RGB-D/IK expert and retain the learned ensemble in the center. | 86/90 versus current 66/90 on locked unseen placements; 20 recoveries and 0 regressions. | Promoted as recommended system policy. |
 | POSE-01 | A learned metric-pose residual can preserve IK structure while correcting RGB-D bias. | Predict a bounded XYZ correction from analytical pose features. | Held-out mean error improved by 0.165 mm, but grasp success fell from 40/40 to 34/40 at full blend and 38/40 at 25%. | Rejected; tooling retained. |
+| GRASP-CRITIC-01 | Actual lift outcomes can identify contact-stable residuals better than geometric-center labels. | Train a candidate-ranking critic on 780 perturbed grasps with an analytical fallback margin. | Two fresh normal seeds improved 75/80 to 80/80; known +6 mm Y-bias improved 34/40 to 40/40; full task tied 26/40. | Accepted for grasp acquisition; end-to-end policy unchanged. |
 
 ## DIFF-01 design decision
 
@@ -277,3 +278,28 @@ needed to create honest improvement headroom.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5g-grasp-pose-residual.json`.
+
+## Phase 5H outcome-trained grasp decision
+
+POSE-01 showed that smaller Cartesian error can still reduce grasp success. GRASP-CRITIC-01 therefore
+uses 780 on-policy perturbation attempts from 60 scenes, labeled by actual selected-object lift and
+distractor motion. The critic ranks bounded XY residual candidates while preserving RGB-D detection,
+IK, keyframes, a zero-offset fallback, and an explicit confidence margin. Wide ±18 mm collection also
+records IK-unreachable proposals as failures, so runtime can exclude them safely.
+
+The collected set had a 70.3% overall success rate and a 90.0% baseline rate. A scene-level validation
+split reached 94.2% classification accuracy and 12/12 candidate-ranking success. On fresh paired seed
+3934, the normal analytical baseline reached 38/40 and the critic reached 40/40. Replication seed 4237
+improved 37/40 to 40/40. Across both normal seeds the critic recovered all five failures with no
+regressions. Under a controlled known +6 mm Y execution bias on seed 4035, the critic
+reached 40/40 versus 34/40 and recovered all six failures without regressions. The stress benchmark
+assumes the bias is known when candidates are constructed; bias estimation itself remains future work.
+
+When composed with the Phase 5F learned place skill on seed 4136, both systems scored 26/40. The critic
+recovered three expert-grasp failures but changed the transported-object state enough to regress three
+other placements. The critic is therefore accepted as the preferred grasp component, but the
+end-to-end hierarchy is not promoted. The next experiment should normalize the post-grasp handoff pose
+or condition the place policy on the measured object/gripper state at transition.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5h-grasp-success-critic.json`.

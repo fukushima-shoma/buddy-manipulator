@@ -180,7 +180,9 @@ def run_expert_grasp_then_place_policy(
         transitioned=True,
         transition_step=expert_steps,
         transition_mode=(
-            "residual_grasp" if grasp_pose_policy is not None else "expert_grasp"
+            str(getattr(grasp_pose_policy, "transition_mode", "residual_grasp"))
+            if grasp_pose_policy is not None
+            else "expert_grasp"
         ),
         max_detected_object_height_m=post_grasp_height,
         trace=trace,

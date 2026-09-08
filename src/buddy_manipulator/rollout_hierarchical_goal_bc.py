@@ -16,6 +16,10 @@ from buddy_manipulator.goal_task import (
     sample_object_positions,
 )
 from buddy_manipulator.grasp_pose_residual import GraspPoseResidualRunner
+from buddy_manipulator.grasp_success_critic import (
+    GraspSuccessCriticRunner,
+    OutcomeRankedGraspPosePolicy,
+)
 from buddy_manipulator.hierarchical_goal_policy import (
     run_expert_grasp_then_place_policy,
     run_hierarchical_goal_policy,
@@ -37,7 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=3025)
     parser.add_argument(
         "--grasp-controller",
-        choices=("learned", "expert", "residual"),
+        choices=("learned", "expert", "residual", "critic"),
         default="learned",
         help="Use learned grasp or an RGB-D/IK diagnostic upper bound.",
     )
@@ -47,6 +51,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
     )
     parser.add_argument("--grasp-residual-blend", type=float, default=None)
+    parser.add_argument("--grasp-critic-checkpoint", type=Path, default=None)
+    parser.add_argument("--grasp-known-bias-y-mm", type=float, default=0.0)
+    parser.add_argument("--grasp-critic-minimum-improvement", type=float, default=0.03)
     parser.add_argument(
         "--transition",
         choices=("observable", "oracle"),
@@ -86,6 +93,16 @@ def main() -> None:
             device_name=args.device,
             blend=args.grasp_residual_blend,
         )
+    elif args.grasp_controller == "critic":
+        if args.grasp_critic_checkpoint is None:
+            raise ValueError("critic grasp requires --grasp-critic-checkpoint")
+        grasp_pose_policy = OutcomeRankedGraspPosePolicy(
+            runner=GraspSuccessCriticRunner.from_checkpoint(
+                args.grasp_critic_checkpoint, device_name=args.device
+            ),
+            known_bias_y_mm=args.grasp_known_bias_y_mm,
+            minimum_score_improvement=args.grasp_critic_minimum_improvement,
+        )
     if grasp_policy.model.goal_dim != 4 or place_policy.model.goal_dim != 4:
         raise ValueError("both checkpoints must use four-value manipulation goals")
 
@@ -106,7 +123,7 @@ def main() -> None:
         grasp_policy.reset(args.seed * 100_000 + index)
         place_policy.reset(args.seed * 100_000 + index)
         with RgbdCamera(model, width=args.width, height=args.height) as camera:
-            if args.grasp_controller in ("expert", "residual"):
+            if args.grasp_controller in ("expert", "residual", "critic"):
                 result = run_expert_grasp_then_place_policy(
                     model,
                     data,
@@ -175,11 +192,20 @@ def main() -> None:
             else None
         ),
         "grasp_residual_blend": (
-            grasp_pose_policy.blend if grasp_pose_policy is not None else None
+            grasp_pose_policy.blend
+            if args.grasp_controller == "residual"
+            and grasp_pose_policy is not None
+            else None
         ),
+        "grasp_critic_checkpoint": (
+            str(args.grasp_critic_checkpoint)
+            if args.grasp_critic_checkpoint is not None
+            else None
+        ),
+        "grasp_known_bias_y_mm": args.grasp_known_bias_y_mm,
         "transition_mode": (
             f"{args.grasp_controller}_grasp"
-            if args.grasp_controller in ("expert", "residual")
+            if args.grasp_controller in ("expert", "residual", "critic")
             else args.transition
         ),
         "fixed_goal": args.goal.to_dict() if args.goal else None,

@@ -1,0 +1,88 @@
+{
+  "experiment_id": "GRASP-CRITIC-01",
+  "phase": "5H",
+  "date": "2026-09-08",
+  "hypothesis": "A critic trained on actual lift outcomes can rank contact-stable grasp residuals better than geometric-center supervision.",
+  "dataset": {
+    "seed": 3833,
+    "scenes": 60,
+    "candidates_per_scene": 13,
+    "samples": 780,
+    "maximum_xy_mm": 18.0,
+    "successes": 548,
+    "success_rate": 0.7025641202926636,
+    "baseline_successes": 54,
+    "baseline_success_rate": 0.8999999761581421,
+    "unreachable_attempts": 47
+  },
+  "training": {
+    "seed": 17,
+    "epochs": 160,
+    "best_epoch": 27,
+    "validation_scenes": 12,
+    "validation_accuracy": 0.9423076923076923,
+    "validation_balanced_accuracy": 0.9467592592592593,
+    "validation_ranking_success_rate": 1.0,
+    "validation_baseline_success_rate": 1.0
+  },
+  "runtime_safeguards": {
+    "candidate_step_mm": 3.0,
+    "maximum_command_mm": 9.0,
+    "minimum_score_improvement": 0.03,
+    "analytical_fallback": true,
+    "exclude_ik_unreachable_candidates": true
+  },
+  "paired_grasp_evaluations": [
+    {
+      "condition": "normal",
+      "seed": 3934,
+      "episodes": 40,
+      "baseline_successes": 38,
+      "critic_successes": 40,
+      "recoveries": 2,
+      "regressions": 0
+    },
+    {
+      "condition": "known +6 mm Y execution bias",
+      "seed": 4035,
+      "episodes": 40,
+      "baseline_successes": 34,
+      "critic_successes": 40,
+      "recoveries": 6,
+      "regressions": 0,
+      "assumption": "The execution bias is known when constructing candidate residuals."
+    },
+    {
+      "condition": "normal replication",
+      "seed": 4237,
+      "episodes": 40,
+      "baseline_successes": 37,
+      "critic_successes": 40,
+      "recoveries": 3,
+      "regressions": 0
+    }
+  ],
+  "normal_grasp_aggregate": {
+    "seeds": [3934, 4237],
+    "episodes": 80,
+    "baseline_successes": 75,
+    "critic_successes": 80,
+    "recoveries": 5,
+    "regressions": 0
+  },
+  "full_task_evaluation": {
+    "seed": 4136,
+    "episodes": 40,
+    "expert_grasp_successes": 26,
+    "critic_grasp_successes": 26,
+    "recoveries": 3,
+    "regressions": 3,
+    "place_policy": "Phase 5F target-factorized learned place policy"
+  },
+  "decision": {
+    "grasp_component": "accepted",
+    "end_to_end_hierarchy": "not promoted",
+    "reason": "Grasp-only gains were repeatable with no regressions, but downstream placement remained unchanged overall.",
+    "next": "Normalize the post-grasp handoff pose or condition placement on observed object and gripper state."
+  }
+}

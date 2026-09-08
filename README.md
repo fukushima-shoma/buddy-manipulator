@@ -257,6 +257,23 @@ full residual 34/40、25% blend 38/40だった。Full-task二組では45/80対44
 4 recoveriesに対して3 regressionsが出たためpromoteしていない。次はgeometric centerではなく
 on-policy pose perturbationのlift/contact outcomeを教師にする。
 
+Phase 5Hでは60 scenes × 13候補（合計780 grasp attempts）のXY pose perturbationを実行し、
+実際のlift successを教師にしたsuccess criticを学習した。Fresh paired graspでは通常条件を
+2つの通常条件seed合計を75/80から80/80へ、既知の+6 mm Y calibration bias条件を
+34/40から40/40へ改善した。
+一方、既存のlearned place policyまで含むfull taskは26/40で同率（3 recoveries / 3 regressions）
+だったため、criticはgrasp componentとして採用するがend-to-end recommended policyは更新しない。
+
+```bash
+./scripts/collect_grasp_perturbations.sh \
+  --scenes 60 --candidates 13 --maximum-xy-mm 18
+./scripts/train_grasp_success_critic.sh \
+  data/grasp_perturbations/phase5h_seed3833.npz
+./scripts/run_grasp_success_critic.sh \
+  outputs/phase5/grasp_success_critic/seed17/grasp_success_critic.pt \
+  --controller critic --episodes 40 --seed 3934
+```
+
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \
   outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \
