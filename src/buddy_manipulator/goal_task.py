@@ -169,6 +169,48 @@ def target_position(model: Any, data: Any, goal: ManipulationGoal) -> np.ndarray
     return np.asarray(data.geom_xpos[geom_id], dtype=np.float64).copy()
 
 
+def goal_grasp_keyframes(detection: WorldDetection) -> list[Keyframe]:
+    """Build the goal-independent acquisition skill through safe retraction."""
+    pickup_angle = math.atan2(detection.y, detection.x)
+    transport_radius = 0.20
+    pickup_transport = (
+        transport_radius * math.cos(pickup_angle),
+        transport_radius * math.sin(pickup_angle),
+    )
+    grasp_height = detection.z - 0.012
+    grasp = _top_down_joints(detection.x, detection.y, grasp_height)
+    return [
+        Keyframe(
+            1.2,
+            _top_down_joints(detection.x, detection.y, detection.z + 0.10),
+            0.03,
+        ),
+        Keyframe(1.0, grasp, 0.03),
+        Keyframe(1.0, grasp, 0.0),
+        Keyframe(1.5, _top_down_joints(detection.x, detection.y, 0.20), 0.0),
+        Keyframe(1.2, _top_down_joints(*pickup_transport, 0.20), 0.0),
+    ]
+
+
+def execute_goal_grasp(
+    model: Any,
+    data: Any,
+    detection: WorldDetection,
+    *,
+    viewer: Any | None = None,
+    step_callback: Callable[[Any, Any], None] | None = None,
+) -> None:
+    """Execute the deterministic Phase 5 grasp skill only."""
+    run_keyframes(
+        model,
+        data,
+        goal_grasp_keyframes(detection),
+        viewer=viewer,
+        realtime=viewer is not None,
+        step_callback=step_callback,
+    )
+
+
 def execute_pick_and_place(
     model: Any,
     data: Any,
@@ -181,26 +223,15 @@ def execute_pick_and_place(
     """Pick the selected object and release it over the requested target."""
     destination = target_position(model, data, goal)
     target_x, target_y = float(destination[0]), float(destination[1])
-    pickup_angle = math.atan2(detection.y, detection.x)
     target_angle = math.atan2(target_y, target_x)
     transport_radius = 0.20
-    pickup_transport = (
-        transport_radius * math.cos(pickup_angle),
-        transport_radius * math.sin(pickup_angle),
-    )
     target_transport = (
         transport_radius * math.cos(target_angle),
         transport_radius * math.sin(target_angle),
     )
-    grasp_height = detection.z - 0.012
-    grasp = _top_down_joints(detection.x, detection.y, grasp_height)
     place_height = 0.052
     keyframes = [
-        Keyframe(1.2, _top_down_joints(detection.x, detection.y, detection.z + 0.10), 0.03),
-        Keyframe(1.0, grasp, 0.03),
-        Keyframe(1.0, grasp, 0.0),
-        Keyframe(1.5, _top_down_joints(detection.x, detection.y, 0.20), 0.0),
-        Keyframe(1.2, _top_down_joints(*pickup_transport, 0.20), 0.0),
+        *goal_grasp_keyframes(detection),
         Keyframe(2.5, _top_down_joints(*target_transport, 0.20), 0.0),
         Keyframe(1.5, _top_down_joints(target_x, target_y, 0.20), 0.0),
         Keyframe(1.5, _top_down_joints(target_x, target_y, place_height), 0.0),

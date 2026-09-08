@@ -199,3 +199,53 @@ build should stop treating the 13.4-second behavior as one monolithic action pre
 train or route a shared grasp-acquisition skill first, then invoke a target-conditioned
 transport-and-place skill after observable grasp confirmation. Full results are in
 `docs/experiment_results/2026-09-08-phase5e-target-conditioning.json`.
+
+## Phase 5F: hierarchical skill composition
+
+Phase 5F replaces the single 13.4-second prediction problem with overlapping skill windows. The
+grasp dataset covers 0.0-4.7 seconds through the completed vertical lift. The place dataset starts
+at 3.2 seconds, immediately after gripper closure, and continues through release and retreat. This
+overlap gives the place policy support around variable handoff times without rewriting the recorded
+episodes. `--goal-skill grasp|place` selects the view during training and evaluation.
+
+The goal is explicitly factorized as well: grasp sees object identity but not target identity, while
+place sees target identity but not object identity. This turns held-out purple-to-yellow into the
+composition of a known purple grasp and known yellow placement instead of an unseen four-way token.
+An observable gate requires two consecutive RGB-D detections above 0.09 m while both finger joints
+are closed. A time-based oracle is retained only as a diagnostic.
+
+The first learned grasp models never lifted the object on fresh rollout, including the relative-phase
+variant, so the observable composition scored 0/8. The gate was not relaxed because that would route
+an ungrasped object into the place policy. A deterministic RGB-D/IK grasp was then used to isolate the
+learned place skill. Target-only placement without phase scored 0/8; adding skill-relative phase
+reached 3/8. Under the factorized goal, separate target heads no longer remove object compositional
+sharing and improved a paired benchmark from 6/12 to 8/12.
+
+The locked fresh seed-3530 benchmark for expert grasp plus the factorized target/phase place policy
+scored 24/40 (60%): red-green 7/10, red-yellow 6/10, purple-green 7/10, and held-out purple-yellow
+4/10. This doubles the Phase 5D model-only balanced result of 12/40, but it is a diagnostic hybrid,
+not a fully learned policy and not yet a recommended robust system. The next bottleneck is learned
+acquisition precision; future work should predict object-relative grasp poses or residuals around the
+RGB-D/IK acquisition controller instead of continuing direct joint-action BC.
+
+```bash
+./scripts/run_training.sh data/goal_demonstrations \
+  --goal-skill grasp --phase-conditioning --history-horizon 8 \
+  --action-horizon 8 --use-goal-object-features \
+  --holdout-goal purple:yellow \
+  --output-dir outputs/phase5/hierarchical/grasp_object_phase_seed7
+
+./scripts/run_training.sh data/goal_demonstrations \
+  --goal-skill place --phase-conditioning --factorized-target-heads \
+  --history-horizon 8 --action-horizon 8 \
+  --holdout-goal purple:yellow \
+  --output-dir outputs/phase5/hierarchical/place_target_phase_factorized_seed7
+
+./scripts/run_hierarchical_goal_policy.sh \
+  outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \
+  outputs/phase5/hierarchical/place_target_phase_factorized_seed7/bc_policy.pt \
+  --grasp-controller expert --episodes 40 --seed 3530
+```
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5f-hierarchical-skills.json`.

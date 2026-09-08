@@ -29,7 +29,9 @@ pick-and-place expert、4次元goal付きdataset、task-level evaluatorまで実
 Phase 5B/5Cではgoal-conditioned action chunks、held-out object-target combination、semantic
 phase conditioningを評価した。Phase 5DではGRU historyとmodel-seed ensembleを評価し、
 target geometryが次のbottleneckだと特定した。Phase 5Eのtarget-conditioning ablationsは
-closed-loop改善に失敗したため、次はgraspとtransport/placeを分離したhierarchical policyを作る。
+closed-loop改善に失敗した。Phase 5Fではgraspとtransport/placeを分離し、expert graspで
+place skillを隔離すると24/40まで改善した。一方、learned graspからのobservable handoffは
+0/8だったため、次はRGB-D/IKを基準にobject-relative grasp poseまたはresidualを学習する。
 
 ## Phase 6: 実機移行
 

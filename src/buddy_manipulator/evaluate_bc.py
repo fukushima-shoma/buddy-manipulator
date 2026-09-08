@@ -16,6 +16,7 @@ from buddy_manipulator.behavior_cloning import (
     discover_episodes,
     load_episodes,
     select_named_episodes,
+    slice_goal_skill_episodes,
 )
 from buddy_manipulator.train_bc import evaluate_policy
 
@@ -59,7 +60,9 @@ def evaluate_checkpoint(
         paths = select_named_episodes(all_paths, checkpoint[f"{split}_episodes"])
     config = checkpoint["model_config"]
     dataset = BehaviorCloningDataset(
-        load_episodes(paths),
+        slice_goal_skill_episodes(
+            load_episodes(paths), str(checkpoint.get("goal_skill", "full"))
+        ),
         normalization,
         action_horizon=int(config.get("action_horizon", 1)),
         phase_conditioning=int(config.get("phase_dim", 0)) > 0,

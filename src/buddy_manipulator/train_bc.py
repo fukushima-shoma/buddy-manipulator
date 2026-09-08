@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
     BehaviorCloningPolicy,
+    GOAL_SKILLS,
     NormalizationStats,
     choose_device,
     compute_normalization,
@@ -25,6 +26,7 @@ from buddy_manipulator.behavior_cloning import (
     discover_episodes,
     load_episodes,
     select_named_episodes,
+    slice_goal_skill_episodes,
     split_episodes,
     split_episodes_spatially,
 )
@@ -152,6 +154,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1,
         help="Number of recent proprioceptive observations encoded by a GRU.",
+    )
+    parser.add_argument(
+        "--goal-skill",
+        choices=GOAL_SKILLS,
+        default="full",
+        help="Train on the full goal task or one overlapping hierarchical skill.",
     )
     return parser.parse_args()
 
@@ -388,6 +396,7 @@ def train(
     holdout_goal: tuple[str, str] | None = None,
     phase_conditioning: bool = False,
     history_horizon: int = 1,
+    goal_skill: str = "full",
 ) -> tuple[Path, dict[str, Any]]:
     if (
         epochs <= 0
@@ -446,9 +455,17 @@ def train(
         )
     else:
         raise ValueError(f"unknown split strategy: {split_strategy}")
-    train_episodes = load_episodes(train_paths)
-    validation_episodes = load_episodes(validation_paths)
-    test_episodes = load_episodes(test_paths)
+    if goal_skill not in GOAL_SKILLS:
+        raise ValueError(f"unsupported goal skill: {goal_skill}")
+    train_episodes = slice_goal_skill_episodes(
+        load_episodes(train_paths), goal_skill
+    )
+    validation_episodes = slice_goal_skill_episodes(
+        load_episodes(validation_paths), goal_skill
+    )
+    test_episodes = slice_goal_skill_episodes(
+        load_episodes(test_paths), goal_skill
+    )
     if reuse_checkpoint_normalization:
         if initialization_checkpoint is None:
             raise ValueError("reuse_checkpoint_normalization requires initialize_from")
@@ -713,6 +730,7 @@ def train(
         "validation_episodes": [path.name for path in validation_paths],
         "test_episodes": [path.name for path in test_paths],
         "holdout_goal": list(holdout_goal) if holdout_goal else None,
+        "goal_skill": goal_skill,
         "successful_only": successful_only,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
@@ -745,6 +763,7 @@ def train(
         "phase_conditioning": bool(train_dataset.phase_dim),
         "phase_dim": train_dataset.phase_dim,
         "history_horizon": history_horizon,
+        "goal_skill": goal_skill,
         "failure_replay_fraction": failure_replay_fraction,
         "source_sampling": source_sampling,
         "split_strategy": split_strategy,
@@ -804,6 +823,7 @@ def main() -> None:
         holdout_goal=parse_goal_pair(args.holdout_goal),
         phase_conditioning=args.phase_conditioning,
         history_horizon=args.history_horizon,
+        goal_skill=args.goal_skill,
     )
 
 

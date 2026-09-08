@@ -4,6 +4,10 @@ import numpy as np
 import pytest
 
 from buddy_manipulator.goal_policy_rollout import resolve_execute_chunk_steps
+from buddy_manipulator.hierarchical_goal_policy import (
+    LiftTransitionGate,
+    SkillGoalPolicyRunner,
+)
 from buddy_manipulator.rollout_goal_bc import GoalAveragingPolicyRunner, parse_goal
 
 
@@ -62,3 +66,34 @@ def test_goal_ensemble_averages_compatible_policies() -> None:
     assert first.reset_seed == second.reset_seed == 17
     assert resolve_execute_chunk_steps(ensemble, 0) == 1
     assert resolve_execute_chunk_steps(ensemble, 2) == 2
+
+
+def test_lift_transition_requires_stable_visual_lift_and_closed_gripper() -> None:
+    gate = LiftTransitionGate(required_observations=2)
+    open_joints = np.asarray([0.0, 0.0, 0.0, 0.0, 0.03, 0.03])
+    closed_joints = np.zeros(6)
+
+    assert gate.update(0.12, open_joints) is False
+    assert gate.update(0.05, closed_joints) is False
+    assert gate.update(0.12, closed_joints) is False
+    assert gate.update(0.12, closed_joints) is True
+    assert gate.update(None, closed_joints) is False
+
+
+def test_skill_goal_runner_masks_irrelevant_goal_factor() -> None:
+    policy = FakeGoalPolicy(1.0)
+    captured = []
+    policy.predict_chunk = (
+        lambda _r, _d, _j, goal, _p=None: captured.append(goal.copy())
+        or np.ones((3, 6))
+    )
+
+    SkillGoalPolicyRunner(policy, "grasp").predict_chunk(
+        None, None, None, np.ones(4)
+    )
+    SkillGoalPolicyRunner(policy, "place").predict_chunk(
+        None, None, None, np.ones(4)
+    )
+
+    assert captured[0].tolist() == [1.0, 1.0, 0.0, 0.0]
+    assert captured[1].tolist() == [0.0, 0.0, 1.0, 1.0]

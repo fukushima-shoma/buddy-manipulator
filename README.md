@@ -244,6 +244,18 @@ Phase 5Dでは直近8個のjoint stateをGRUでencodeする。History policyはr
 
 Phase 5Eではgoal-selected target pixels、target別decoder、shared decoder + target residualを比較した。
 Best offline modelでもpaired rolloutは旧ensembleの11/40に対して0/40となり、全variantをrejectした。
-次はmonolithic BCを拡張せず、grasp skillとtransport/place skillを分けるhierarchical policyを作る。
+
+Phase 5Fではmonolithic BCをgraspとtransport/placeへ分割した。Goalもobject-only graspと
+target-only placeへfactorizeし、RGB-D liftとfinger stateによるobservable handoffを追加した。
+Learned graspは0/8でgateを通過できなかったが、RGB-D/IK graspでplace skillを隔離した
+locked benchmarkは24/40（60%）まで改善した。これはdiagnostic hybridであり、完全学習policy
+としては未昇格。次はabsolute joint BCではなくobject-relative grasp pose/residualを学習する。
+
+```bash
+./scripts/run_hierarchical_goal_policy.sh \
+  outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \
+  outputs/phase5/hierarchical/place_target_phase_factorized_seed7/bc_policy.pt \
+  --grasp-controller expert --episodes 40 --seed 3530
+```
 
 詳細は[docs/phase5.md](docs/phase5.md)を参照。

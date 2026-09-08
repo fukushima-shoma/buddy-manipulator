@@ -10,6 +10,7 @@ from buddy_manipulator.behavior_cloning import (
     BehaviorCloningDataset,
     BehaviorCloningPolicy,
     BehaviorCloningRunner,
+    EpisodeData,
     MpsSafeAdaptiveAvgPool2d,
     compute_normalization,
     discover_episodes,
@@ -17,6 +18,7 @@ from buddy_manipulator.behavior_cloning import (
     extract_goal_object_features,
     extract_goal_target_features,
     load_episodes,
+    slice_goal_skill_episodes,
     split_episodes,
     split_episodes_spatially,
 )
@@ -51,8 +53,8 @@ def write_episode(
     source: str = "scripted",
     block_position: tuple[float, float, float] = (0.3, 0.08, 0.025),
     task_goal: tuple[str, str] | None = None,
+    samples: int = 4,
 ) -> None:
-    samples = 4
     rng = np.random.default_rng(index)
     arrays = {
         "timestamp": np.arange(samples, dtype=np.float64) * 0.2,
@@ -254,6 +256,33 @@ def test_goal_phase_encoding_follows_expert_boundaries() -> None:
     assert encode_goal_phase(1.19).argmax() == 0
     assert encode_goal_phase(1.2).argmax() == 1
     assert encode_goal_phase(13.4).argmax() == GOAL_PHASE_DIM - 1
+
+
+def test_goal_skill_slices_overlap_around_grasp_handoff() -> None:
+    sample_count = 68
+    timestamp = np.arange(sample_count, dtype=np.float64) * 0.2
+    episode = EpisodeData(
+        name="episode_00000",
+        source="goal_scripted",
+        rgb=np.zeros((sample_count, 4, 4, 3), dtype=np.uint8),
+        depth=np.zeros((sample_count, 4, 4), dtype=np.float32),
+        joint_position=np.zeros((sample_count, 6), dtype=np.float32),
+        action=np.zeros((sample_count, 6), dtype=np.float32),
+        goal=np.ones((sample_count, 4), dtype=np.float32),
+        timestamp=timestamp,
+    )
+
+    grasp = slice_goal_skill_episodes([episode], "grasp")[0]
+    place = slice_goal_skill_episodes([episode], "place")[0]
+
+    assert grasp.timestamp[-1] == pytest.approx(4.6)
+    assert place.timestamp[0] == pytest.approx(3.2)
+    assert np.all(grasp.goal[:, 2:4] == 0.0)
+    assert np.all(place.goal[:, 0:2] == 0.0)
+    assert np.all(place.goal[:, 2:4] == 1.0)
+    assert grasp.sample_count + place.sample_count > episode.sample_count
+    with pytest.raises(ValueError, match="unsupported goal skill"):
+        slice_goal_skill_episodes([episode], "release")
 
 
 def test_history_dataset_pads_episode_start_and_policy_uses_gru(tmp_path) -> None:
@@ -569,6 +598,44 @@ def test_goal_training_keeps_combination_test_only(tmp_path) -> None:
         device_name="cpu",
     )
     assert metrics["samples"] == 8
+
+
+def test_goal_skill_training_slices_data_and_persists_contract(tmp_path) -> None:
+    for index in range(2):
+        write_episode(
+            tmp_path,
+            index,
+            success=True,
+            offset=index * 0.01,
+            task_goal=("red", "green"),
+            samples=30,
+        )
+
+    checkpoint_path, report = train(
+        tmp_path,
+        tmp_path / "place_output",
+        epochs=1,
+        batch_size=8,
+        validation_fraction=0.5,
+        seed=7,
+        device_name="cpu",
+        goal_skill="place",
+    )
+
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
+    runner = BehaviorCloningRunner.from_checkpoint(
+        checkpoint_path, device_name="cpu"
+    )
+    metrics = evaluate_checkpoint(
+        checkpoint_path,
+        tmp_path,
+        split="validation",
+        batch_size=8,
+        device_name="cpu",
+    )
+    assert report["goal_skill"] == checkpoint["goal_skill"] == "place"
+    assert runner.goal_skill == "place"
+    assert metrics["samples"] == 14
 
 
 def test_phase_conditioned_training_writes_reusable_checkpoint(tmp_path) -> None:

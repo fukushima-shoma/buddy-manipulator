@@ -225,3 +225,27 @@ learned horizon.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5e-target-conditioning.json`.
+
+## Phase 5F hierarchical-skill decision
+
+The expert trajectory was split into overlapping acquisition (0.0-4.7 s) and place (3.2-13.4 s)
+views. Acquisition receives only object identity and placement receives only target identity. An
+RGB-D height plus finger-proprioception gate requires two stable lifted observations before learned
+handoff. This is a stronger test than a permissive timer because failed grasps cannot silently enter
+the transport skill.
+
+The learned acquisition policy failed to produce a lift in 8/8 fresh trials, even after adding a
+skill-relative phase signal, so the end-to-end learned hierarchy remains rejected. With deterministic
+RGB-D/IK acquisition isolating the second skill, target-only BC scored 0/8 and relative phase scored
+3/8. A target-factorized decoder is appropriate only after masking object identity: on identical
+seed-3429 scenes it improved from 6/12 to 8/12 without sacrificing the held-out object combination.
+
+The resulting diagnostic hybrid reached 24/40 on locked seed 3530, split 7/10 red-green, 6/10
+red-yellow, 7/10 purple-green, and 4/10 held-out purple-yellow. It is retained as the Phase 5F
+diagnostic baseline, not promoted as the recommended policy. It proves that shorter, factorized
+skills improve the long-horizon result while identifying learned grasp precision as the next hard
+block. The next experiment should learn object-relative grasp poses or residual corrections around
+the analytical acquisition controller rather than regress absolute joint trajectories.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5f-hierarchical-skills.json`.

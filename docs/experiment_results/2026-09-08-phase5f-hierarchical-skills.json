@@ -1,0 +1,69 @@
+{
+  "date": "2026-09-08",
+  "phase": "5F",
+  "objective": "decompose goal-conditioned manipulation into factorized grasp and place skills with an observable handoff",
+  "protocol": {
+    "successful_episodes": 78,
+    "train_episodes": 46,
+    "validation_episodes": 12,
+    "test_episodes": 20,
+    "holdout_goal": ["purple", "yellow"],
+    "grasp_window_seconds": [0.0, 4.7],
+    "place_window_seconds": [3.2, 13.4],
+    "action_horizon": 8,
+    "history_horizon": 8,
+    "split_seed": 7,
+    "model_seed": 7,
+    "sampler_seed": 7,
+    "observable_gate": "two consecutive RGB-D object heights >= 0.09 m with both finger joints <= 0.012"
+  },
+  "learned_grasp_phase": {
+    "checkpoint": "outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt",
+    "goal_contract": "object identity only",
+    "best_epoch": 49,
+    "heldout_normalized_mse": 0.043448,
+    "heldout_mean_action_mae": 0.024765,
+    "observable_composition": {
+      "seed": 3328,
+      "successes": 0,
+      "trials": 8,
+      "handoffs": 0
+    }
+  },
+  "place_ablations": {
+    "target_only_no_phase": {
+      "seed": 3227,
+      "successes": 0,
+      "trials": 8
+    },
+    "target_only_relative_phase": {
+      "seed": 3227,
+      "successes": 3,
+      "trials": 8
+    },
+    "paired_seed_3429": {
+      "shared_decoder": [6, 12],
+      "factorized_target_decoder": [8, 12]
+    }
+  },
+  "factorized_place_phase": {
+    "checkpoint": "outputs/phase5/hierarchical/place_target_phase_factorized_seed7/bc_policy.pt",
+    "goal_contract": "target identity only",
+    "best_epoch": 49,
+    "heldout_normalized_mse": 0.034967,
+    "heldout_mean_action_mae": 0.028227,
+    "locked_expert_grasp_rollout": {
+      "seed": 3530,
+      "successes": 24,
+      "trials": 40,
+      "per_goal": {
+        "red:green": [7, 10],
+        "red:yellow": [6, 10],
+        "purple:green": [7, 10],
+        "purple:yellow": [4, 10]
+      }
+    }
+  },
+  "finding": "factorized short-horizon skills doubled balanced success behind a reliable grasp, while the strict observable gate identified learned acquisition precision as the current blocker",
+  "decision": "retain the 24/40 expert-grasp diagnostic baseline; do not promote the end-to-end learned hierarchy; next learn object-relative grasp poses or IK residuals"
+}

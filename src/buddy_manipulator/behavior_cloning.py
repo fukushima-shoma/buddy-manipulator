@@ -16,6 +16,14 @@ from torch.utils.data import Dataset
 from buddy_manipulator.task_phase import GOAL_PHASE_DIM, encode_goal_phase
 
 
+GOAL_SKILLS = ("full", "grasp", "place")
+# The expert closes at 3.2 s and finishes the vertical lift at 4.7 s.  The
+# overlap gives the place policy training support around an observation-driven
+# handoff instead of requiring one exact transition frame.
+GOAL_GRASP_END_SECONDS = 4.7
+GOAL_PLACE_START_SECONDS = 3.2
+
+
 @dataclass(frozen=True)
 class EpisodePath:
     data_path: Path
@@ -241,6 +249,53 @@ def load_episodes(episode_paths: Sequence[EpisodePath]) -> list[EpisodeData]:
                 )
             )
     return episodes
+
+
+def slice_goal_skill_episodes(
+    episodes: Sequence[EpisodeData],
+    skill: str,
+) -> list[EpisodeData]:
+    """Return episode views for one hierarchical goal-manipulation skill."""
+    if skill not in GOAL_SKILLS:
+        raise ValueError(f"unsupported goal skill: {skill}")
+    if skill == "full":
+        return list(episodes)
+
+    sliced = []
+    for episode in episodes:
+        if episode.timestamp is None:
+            raise ValueError("goal skill slicing requires episode timestamps")
+        elapsed = episode.timestamp - episode.timestamp[0]
+        if skill == "grasp":
+            indices = np.flatnonzero(elapsed <= GOAL_GRASP_END_SECONDS + 1e-6)
+        else:
+            indices = np.flatnonzero(elapsed >= GOAL_PLACE_START_SECONDS - 1e-6)
+        if indices.size == 0:
+            raise ValueError(f"episode {episode.name} has no {skill} samples")
+        sliced_goal = (
+            episode.goal[indices].copy() if episode.goal is not None else None
+        )
+        if skill == "grasp" and sliced_goal is not None:
+            # Grasp acquisition is shared across destinations. Removing target
+            # bits prevents the held-out object-target pair becoming a shortcut.
+            sliced_goal[:, 2:4] = 0.0
+        elif skill == "place" and sliced_goal is not None:
+            # Transport is shared across object colors once the object is held.
+            # Keep only the destination to expose the intended composition.
+            sliced_goal[:, 0:2] = 0.0
+        sliced.append(
+            EpisodeData(
+                name=episode.name,
+                source=episode.source,
+                rgb=episode.rgb[indices],
+                depth=episode.depth[indices],
+                joint_position=episode.joint_position[indices],
+                action=episode.action[indices],
+                goal=sliced_goal,
+                timestamp=episode.timestamp[indices],
+            )
+        )
+    return sliced
 
 
 def _safe_std(values: np.ndarray, axis: int | None = None) -> np.ndarray:
@@ -792,6 +847,7 @@ class BehaviorCloningRunner:
     model: BehaviorCloningPolicy
     normalization: NormalizationStats
     device: torch.device
+    goal_skill: str = "full"
     _joint_history: list[np.ndarray] = field(default_factory=list, init=False)
 
     @classmethod
@@ -843,6 +899,7 @@ class BehaviorCloningRunner:
                 checkpoint["normalization"]
             ),
             device=device,
+            goal_skill=str(checkpoint.get("goal_skill", "full")),
         )
 
     def predict(
@@ -860,6 +917,19 @@ class BehaviorCloningRunner:
     def reset(self, seed: int | None = None) -> None:
         del seed
         self._joint_history.clear()
+
+    def prime_joint_history(self, joint_positions: Sequence[np.ndarray]) -> None:
+        """Seed recurrent proprioception from observations made by another skill."""
+        if self.model.history_horizon == 1:
+            return
+        for joint_position in joint_positions[-self.model.history_horizon :]:
+            values = np.asarray(joint_position, dtype=np.float32)
+            if values.shape != (6,):
+                raise ValueError("joint history values must have shape (6,)")
+            normalized = (
+                values - self.normalization.joint_mean
+            ) / self.normalization.joint_std
+            self._joint_history.append(normalized.astype(np.float32))
 
     def predict_chunk(
         self,
