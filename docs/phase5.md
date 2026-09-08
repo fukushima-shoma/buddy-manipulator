@@ -372,3 +372,27 @@ placement outcomes, mirroring the successful Phase 5H grasp critic.
 
 Full results are in
 `docs/experiment_results/2026-09-08-phase5i-canonical-handoff.json`.
+
+## Phase 5J: outcome-ranked structured placement
+
+Phase 5J applies the successful grasp-critic pattern to placement. The model does not predict joint
+trajectories. It scores bounded XY release residuals using the proprioceptive handoff tool pose,
+calibrated target position, structured goal, and candidate residual. RGB-D grasp selection, IK
+transport, descent, gripper timing, and retreat remain deterministic. A candidate must beat the
+analytical fallback probability by 0.03, and IK-unreachable candidates are excluded.
+
+The collector executed 540 end-to-end attempts across 60 scenes. Wide ±70 mm perturbations produced
+290/540 successes and 154 IK-unreachable candidates; the zero-residual analytical placement reached
+60/60. The scene-held-out critic achieved 93.5% classification accuracy and 12/12 ranking success.
+
+On fresh seed 4641, analytical and critic placement both reached 40/40 under normal calibration. On
+seed 4742 with a controlled −55 mm X release bias, the analytical fallback reached 34/40 and the
+critic reached 40/40, recovering all six failures with no regressions. The stress result assumes the
+bias is supplied while candidate outcomes are constructed; Phase 5K removes that assumption.
+
+PLACE-CRITIC-01 is accepted. The Phase 5 system baseline becomes critic-ranked grasp plus
+critic-ranked release, with deterministic IK skills between decisions. This is a hybrid learned and
+model-based system, not an end-to-end neural controller.
+
+Full results are in
+`docs/experiment_results/2026-09-08-phase5j-placement-success-critic.json`.

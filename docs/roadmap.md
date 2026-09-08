@@ -37,7 +37,9 @@ lift outcomeからgrasp success criticを学習した。Fresh graspを通常条�
 80/80、既知+6 mm Y bias条件34/40から40/40へ改善したが、learned placeまで含むfull taskは26/40で同率
 だった。Phase 5Iではcanonical handoffでobject XY variationを大きく減らしたが、inference-onlyは
 9/20から7/20、matched/grounded BCは両方0/20となりrejectした。次はabsolute action trajectoryを
-再学習せず、analytical placementをpriorとしてrelease pose候補を実際のtask outcomeでrankingする。
+再学習せず、analytical placementをpriorとしてrelease pose候補を実際のtask outcomeでrankingした。
+Phase 5Jは通常40/40を維持し、−55 mm X biasを34/40から40/40へ改善した。次はbiasを既知として
+与えず、camera observationからonline推定する。
 
 ## Phase 6: 実機移行
 

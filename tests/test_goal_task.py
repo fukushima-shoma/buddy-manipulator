@@ -11,6 +11,7 @@ from buddy_manipulator.goal_task import (
     canonical_handoff_keyframe,
     detect_goal_object,
     execute_pick_and_place,
+    goal_place_keyframes,
     object_position,
     sample_object_positions,
 )
@@ -84,3 +85,18 @@ def test_canonical_handoff_is_reachable_and_keeps_gripper_closed() -> None:
 def test_canonical_handoff_rejects_invalid_duration() -> None:
     with pytest.raises(ValueError, match="duration"):
         canonical_handoff_keyframe(duration=0.0)
+
+
+def test_goal_place_residual_moves_release_pose() -> None:
+    model, data = load_model()
+    goal = ManipulationGoal("red", "green")
+
+    baseline = goal_place_keyframes(model, data, goal)
+    shifted = goal_place_keyframes(
+        model, data, goal, release_residual_m=(0.01, -0.02, 0.0)
+    )
+    baseline_pose = forward_kinematics(baseline[2].joints)
+    shifted_pose = forward_kinematics(shifted[2].joints)
+
+    assert shifted_pose.x - baseline_pose.x == pytest.approx(0.01)
+    assert shifted_pose.y - baseline_pose.y == pytest.approx(-0.02)

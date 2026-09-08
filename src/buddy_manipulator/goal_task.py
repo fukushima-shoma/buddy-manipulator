@@ -244,6 +244,61 @@ def execute_canonical_handoff(
     )
 
 
+def goal_place_keyframes(
+    model: Any,
+    data: Any,
+    goal: ManipulationGoal,
+    *,
+    release_residual_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> list[Keyframe]:
+    """Build deterministic transport and release motion for a held object."""
+    residual = np.asarray(release_residual_m, dtype=np.float64)
+    if residual.shape != (3,):
+        raise ValueError("release residual must have three values")
+    destination = target_position(model, data, goal) + residual
+    target_x, target_y = float(destination[0]), float(destination[1])
+    target_angle = math.atan2(target_y, target_x)
+    transport_radius = 0.20
+    target_transport = (
+        transport_radius * math.cos(target_angle),
+        transport_radius * math.sin(target_angle),
+    )
+    place_height = 0.052 + float(residual[2])
+    return [
+        Keyframe(2.5, _top_down_joints(*target_transport, 0.20), 0.0),
+        Keyframe(1.5, _top_down_joints(target_x, target_y, 0.20), 0.0),
+        Keyframe(1.5, _top_down_joints(target_x, target_y, place_height), 0.0),
+        Keyframe(1.0, _top_down_joints(target_x, target_y, place_height), 0.03),
+        Keyframe(1.0, _top_down_joints(target_x, target_y, 0.16), 0.03),
+    ]
+
+
+def execute_goal_place(
+    model: Any,
+    data: Any,
+    goal: ManipulationGoal,
+    *,
+    release_residual_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    viewer: Any | None = None,
+    step_callback: Callable[[Any, Any], None] | None = None,
+) -> GoalTaskResult:
+    """Transport and release an already-held object using deterministic IK."""
+    run_keyframes(
+        model,
+        data,
+        goal_place_keyframes(
+            model,
+            data,
+            goal,
+            release_residual_m=release_residual_m,
+        ),
+        viewer=viewer,
+        realtime=viewer is not None,
+        step_callback=step_callback,
+    )
+    return evaluate_goal_task(model, data, goal)
+
+
 def execute_pick_and_place(
     model: Any,
     data: Any,
@@ -257,15 +312,6 @@ def execute_pick_and_place(
     step_callback: Callable[[Any, Any], None] | None = None,
 ) -> GoalTaskResult:
     """Pick the selected object and release it over the requested target."""
-    destination = target_position(model, data, goal)
-    target_x, target_y = float(destination[0]), float(destination[1])
-    target_angle = math.atan2(target_y, target_x)
-    transport_radius = 0.20
-    target_transport = (
-        transport_radius * math.cos(target_angle),
-        transport_radius * math.sin(target_angle),
-    )
-    place_height = 0.052
     handoff_keyframes = (
         [
             canonical_handoff_keyframe(
@@ -279,11 +325,7 @@ def execute_pick_and_place(
     keyframes = [
         *goal_grasp_keyframes(detection),
         *handoff_keyframes,
-        Keyframe(2.5, _top_down_joints(*target_transport, 0.20), 0.0),
-        Keyframe(1.5, _top_down_joints(target_x, target_y, 0.20), 0.0),
-        Keyframe(1.5, _top_down_joints(target_x, target_y, place_height), 0.0),
-        Keyframe(1.0, _top_down_joints(target_x, target_y, place_height), 0.03),
-        Keyframe(1.0, _top_down_joints(target_x, target_y, 0.16), 0.03),
+        *goal_place_keyframes(model, data, goal),
     ]
     run_keyframes(
         model,

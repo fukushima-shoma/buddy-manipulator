@@ -31,6 +31,7 @@ enter training data.
 | POSE-01 | A learned metric-pose residual can preserve IK structure while correcting RGB-D bias. | Predict a bounded XYZ correction from analytical pose features. | Held-out mean error improved by 0.165 mm, but grasp success fell from 40/40 to 34/40 at full blend and 38/40 at 25%. | Rejected; tooling retained. |
 | GRASP-CRITIC-01 | Actual lift outcomes can identify contact-stable residuals better than geometric-center labels. | Train a candidate-ranking critic on 780 perturbed grasps with an analytical fallback margin. | Two fresh normal seeds improved 75/80 to 80/80; known +6 mm Y-bias improved 34/40 to 40/40; full task tied 26/40. | Accepted for grasp acquisition; end-to-end policy unchanged. |
 | HANDOFF-01 | Canonicalizing the post-grasp state will make learned placement more stable. | Add a fixed closed-gripper handoff pose; test inference-only use, matched retraining, and explicit object/target grounding. | XY variation fell sharply, but inference-only scored 7/20 versus 9/20 and both matched BC variants scored 0/20 versus 11/20. | Rejected as a policy; instrumentation retained. |
+| PLACE-CRITIC-01 | Placement outcomes can supervise a bounded release decision more reliably than absolute-action BC. | Rank XY release residuals around deterministic IK transport with an analytical fallback. | Normal stayed 40/40; controlled −55 mm X-bias improved 34/40 to 40/40 with six recoveries and no regressions. | Accepted as the Phase 5 placement component. |
 
 ## DIFF-01 design decision
 
@@ -327,3 +328,19 @@ outcomes, analogous to GRASP-CRITIC-01.
 
 The machine-readable decision record is
 `docs/experiment_results/2026-09-08-phase5i-canonical-handoff.json`.
+
+## Phase 5J outcome-ranked placement decision
+
+PLACE-CRITIC-01 collected 540 full grasp-and-place trials from 60 scenes with bounded random XY
+release perturbations. The dataset contained 290 successes and 154 unreachable wide candidates;
+the zero-residual analytical release succeeded in all 60 scenes. Proprioceptive forward kinematics is
+used at handoff because the held object can be occluded from the overhead camera.
+
+The critic reached 93.5% held-out classification accuracy and 12/12 candidate-ranking success. Paired
+normal rollout preserved 40/40. With a supplied −55 mm X execution bias, it improved 34/40 to 40/40,
+recovering every baseline failure without regressing a success. This passes the component promotion
+gate. The next experiment must infer execution bias from observed placement error instead of receiving
+it as an evaluation parameter.
+
+The machine-readable decision record is
+`docs/experiment_results/2026-09-08-phase5j-placement-success-critic.json`.

@@ -281,6 +281,12 @@ explicit object/target groundingの両方が0/20だった。Offline MAEの改善
 移らないため、handoff normalizationはablationとして保持し、次はanalytical place trajectory上で
 release candidateをoutcome rankingするstructured policyへ進む。
 
+Phase 5Jではanalytical transportを維持し、release XY residualだけをtask outcomeからrankingする
+placement success criticを追加した。540 attemptsで学習し、通常条件ではbaseline/criticともに
+40/40を維持した。−55 mm X release biasでは34/40から40/40へ改善し、6 failuresを回復して
+regressionはなかった。Phase 5のrecommended systemはgrasp critic + placement critic + IK skillsの
+structured hierarchyとなる。
+
 ```bash
 ./scripts/run_hierarchical_goal_policy.sh \
   outputs/phase5/hierarchical/grasp_object_phase_seed7/bc_policy.pt \

@@ -1,0 +1,50 @@
+{
+  "experiment_id": "PLACE-CRITIC-01",
+  "phase": "5J",
+  "date": "2026-09-08",
+  "dataset": {
+    "seed": 4540,
+    "scenes": 60,
+    "candidates_per_scene": 9,
+    "samples": 540,
+    "maximum_xy_mm": 70.0,
+    "successes": 290,
+    "success_rate": 0.5370370149612427,
+    "baseline_successes": 60,
+    "unreachable_attempts": 154
+  },
+  "training": {
+    "seed": 23,
+    "best_epoch": 65,
+    "validation_scenes": 12,
+    "validation_accuracy": 0.9351851851851852,
+    "validation_balanced_accuracy": 0.9349914236706689,
+    "validation_ranking_success_rate": 1.0
+  },
+  "paired_rollouts": [
+    {
+      "condition": "normal",
+      "seed": 4641,
+      "episodes": 40,
+      "baseline_successes": 40,
+      "critic_successes": 40,
+      "recoveries": 0,
+      "regressions": 0
+    },
+    {
+      "condition": "known -55 mm X release bias",
+      "seed": 4742,
+      "episodes": 40,
+      "baseline_successes": 34,
+      "critic_successes": 40,
+      "recoveries": 6,
+      "regressions": 0
+    }
+  ],
+  "decision": {
+    "status": "accepted as the Phase 5 placement component",
+    "system": "grasp success critic + deterministic IK transport + placement success critic",
+    "limitation": "The stress benchmark supplies the execution bias when constructing candidate outcomes.",
+    "next": "Estimate execution bias online from observed placement error."
+  }
+}
